@@ -47,8 +47,8 @@ function verify<T extends JwtPayload = JwtPayload>(token: string, secret: string
   const signatureBuf = Buffer.from(signature);
   const expectedBuf = Buffer.from(expectedSignature);
   if (
-    signatureBuf.length !== expectedBuf.length
-    || !crypto.timingSafeEqual(signatureBuf, expectedBuf)
+    signatureBuf.length !== expectedBuf.length ||
+    !crypto.timingSafeEqual(signatureBuf, expectedBuf)
   ) {
     throw new Error('Invalid token signature');
   }

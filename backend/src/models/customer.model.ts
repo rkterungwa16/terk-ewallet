@@ -1,6 +1,4 @@
-import {
-  Schema, model, Document, Types,
-} from 'mongoose';
+import { Schema, model, Document, Types } from 'mongoose';
 import { nextSequence } from './counter.model';
 
 export const CUSTOMER_ROLES = ['customer', 'admin'] as const;
@@ -54,7 +52,9 @@ const customerSchema = new Schema<ICustomer>(
     name: { type: String, maxlength: 128, trim: true },
     role: { type: String, enum: CUSTOMER_ROLES, default: 'customer' },
     accountNumber: {
-      type: Number, unique: true, index: true,
+      type: Number,
+      unique: true,
+      index: true,
     },
     balanceKobo: { type: Number, default: 0, min: 0 },
     bankAccounts: { type: [bankAccountSchema], default: [] },

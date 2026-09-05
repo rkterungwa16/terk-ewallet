@@ -10,7 +10,10 @@ export interface IPaystackEvent extends Document {
 const paystackEventSchema = new Schema<IPaystackEvent>({
   event: { type: String, required: true },
   reference: {
-    type: String, required: true, unique: true, index: true,
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
   },
   rawPayload: { type: Schema.Types.Mixed, required: true },
   processedAt: { type: Date, default: Date.now },

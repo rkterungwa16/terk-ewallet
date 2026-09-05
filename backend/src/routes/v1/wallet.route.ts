@@ -20,7 +20,11 @@ walletRouter.get('/balance', walletController.getBalance);
 walletRouter.get('/transactions', walletController.getTransactions);
 
 // POST /v1/wallet/fund/initialize { amount } -> { authorizationUrl, reference }
-walletRouter.post('/fund/initialize', validate(fundInitializeSchema), walletController.initializeFunding);
+walletRouter.post(
+  '/fund/initialize',
+  validate(fundInitializeSchema),
+  walletController.initializeFunding,
+);
 
 // GET /v1/wallet/fund/verify/:reference -> confirms & credits (also handled by webhook)
 walletRouter.get('/fund/verify/:reference', walletController.confirmFunding);
@@ -32,7 +36,11 @@ walletRouter.post('/transfer', validate(internalTransferSchema), walletControlle
 walletRouter.get('/banks', walletController.listBanks);
 
 // POST /v1/wallet/bank-accounts { accountNumber, bankCode } -> resolves + saves a payout destination
-walletRouter.post('/bank-accounts', validate(addBankAccountSchema), walletController.addBankAccount);
+walletRouter.post(
+  '/bank-accounts',
+  validate(addBankAccountSchema),
+  walletController.addBankAccount,
+);
 
 // POST /v1/wallet/withdraw { amount, bankAccountId } -> payout via Paystack Transfer
 walletRouter.post('/withdraw', validate(withdrawSchema), walletController.withdraw);

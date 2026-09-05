@@ -6,7 +6,11 @@ import { ApiError } from '../utils/ApiError';
 import { httpStatus } from '../utils/httpStatus';
 
 function issueToken(customer: ICustomer): { accessToken: string; expiresInMinutes: number } {
-  const accessToken = jwt.sign({ sub: customer.id as string }, env.jwtSecret, env.jwtExpiresInMinutes * 60);
+  const accessToken = jwt.sign(
+    { sub: customer.id as string },
+    env.jwtSecret,
+    env.jwtExpiresInMinutes * 60,
+  );
   return { accessToken, expiresInMinutes: env.jwtExpiresInMinutes };
 }
 

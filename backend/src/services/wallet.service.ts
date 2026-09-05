@@ -109,7 +109,10 @@ export const walletService = {
     if (verified.status !== 'success') {
       transaction.status = 'failed';
       await transaction.save();
-      throw new ApiError(`Payment was not successful (status: ${verified.status})`, httpStatus.PAYMENT_REQUIRED);
+      throw new ApiError(
+        `Payment was not successful (status: ${verified.status})`,
+        httpStatus.PAYMENT_REQUIRED,
+      );
     }
 
     // Guard against double-processing if the webhook and the verify
@@ -125,7 +128,10 @@ export const walletService = {
       if (alreadyProcessed) {
         const freshTransaction = await Transaction.findOne({ reference }).exec();
         const customer = await Customer.findById(transaction.customer).exec();
-        return { transaction: freshTransaction?.toPublicJSON(), customer: customer?.toPublicJSON() };
+        return {
+          transaction: freshTransaction?.toPublicJSON(),
+          customer: customer?.toPublicJSON(),
+        };
       }
       throw err;
     }
@@ -180,7 +186,10 @@ export const walletService = {
       status: 'success',
     });
 
-    return { transaction: senderTransaction.toPublicJSON(), customer: debitedSender.toPublicJSON() };
+    return {
+      transaction: senderTransaction.toPublicJSON(),
+      customer: debitedSender.toPublicJSON(),
+    };
   },
 
   async listBanks() {

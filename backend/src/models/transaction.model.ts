@@ -1,6 +1,4 @@
-import {
-  Schema, model, Document, Types,
-} from 'mongoose';
+import { Schema, model, Document, Types } from 'mongoose';
 
 export const TRANSACTION_OPERATIONS = ['deposit', 'withdrawal', 'transfer', 'reversal'] as const;
 export type TransactionOperation = (typeof TRANSACTION_OPERATIONS)[number];
@@ -26,7 +24,10 @@ export interface ITransaction extends Document {
 const transactionSchema = new Schema<ITransaction>(
   {
     customer: {
-      type: Schema.Types.ObjectId, ref: 'Customer', required: true, index: true,
+      type: Schema.Types.ObjectId,
+      ref: 'Customer',
+      required: true,
+      index: true,
     },
     accountNumber: { type: Number, required: true, index: true },
     destinationAccountNumber: { type: Number },
@@ -35,7 +36,10 @@ const transactionSchema = new Schema<ITransaction>(
     amountKobo: { type: Number, required: true },
     balanceAfterKobo: { type: Number },
     reference: {
-      type: String, required: true, unique: true, index: true,
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
     },
     status: { type: String, enum: TRANSACTION_STATUSES, default: 'pending' },
     meta: { type: Schema.Types.Mixed },

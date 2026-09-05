@@ -1,6 +1,4 @@
-import {
-  isNumber, matches, max, min, required, RequestSchema,
-} from './validate';
+import { isNumber, matches, max, min, required, RequestSchema } from './validate';
 
 export const fundInitializeSchema: RequestSchema = {
   body: {
@@ -11,7 +9,10 @@ export const fundInitializeSchema: RequestSchema = {
 export const internalTransferSchema: RequestSchema = {
   body: {
     amount: [required('Amount'), isNumber('Amount'), min(10, 'Amount'), max(1000000, 'Amount')],
-    destinationAccountNumber: [required('Destination account number'), isNumber('Destination account number')],
+    destinationAccountNumber: [
+      required('Destination account number'),
+      isNumber('Destination account number'),
+    ],
   },
 };
 

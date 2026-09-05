@@ -4,7 +4,12 @@ import { httpStatus } from '../utils/httpStatus';
 import { isProduction } from '../config/env';
 
 /** Normalizes anything thrown into an ApiError. */
-export function errorConverter(err: unknown, _req: Request, _res: Response, next: NextFunction): void {
+export function errorConverter(
+  err: unknown,
+  _req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
   if (err instanceof ApiError) {
     next(err);
     return;
@@ -18,11 +23,21 @@ export function errorConverter(err: unknown, _req: Request, _res: Response, next
     return;
   }
 
-  next(new ApiError(error.message || 'Internal server error', error.status || httpStatus.INTERNAL_SERVER_ERROR));
+  next(
+    new ApiError(
+      error.message || 'Internal server error',
+      error.status || httpStatus.INTERNAL_SERVER_ERROR,
+    ),
+  );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function errorHandler(err: ApiError, _req: Request, res: Response, _next: NextFunction): void {
+export function errorHandler(
+  err: ApiError,
+  _req: Request,
+  res: Response,
+  _next: NextFunction,
+): void {
   const body: Record<string, unknown> = {
     code: err.status,
     message: err.message,

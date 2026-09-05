@@ -1,6 +1,4 @@
-import {
-  isEmail, maxLength, minLength, required, RequestSchema,
-} from './validate';
+import { isEmail, maxLength, minLength, required, RequestSchema } from './validate';
 
 export const registerSchema: RequestSchema = {
   body: {

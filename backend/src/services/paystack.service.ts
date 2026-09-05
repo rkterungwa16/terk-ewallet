@@ -31,7 +31,10 @@ async function paystackRequest<T>(
   }
 
   if (!res.ok || json.status === false) {
-    throw new ApiError(json.message || 'Paystack request failed', res.status || httpStatus.BAD_GATEWAY);
+    throw new ApiError(
+      json.message || 'Paystack request failed',
+      res.status || httpStatus.BAD_GATEWAY,
+    );
   }
 
   return json.data;
@@ -95,7 +98,9 @@ export const paystackService = {
 
   /** Confirms what actually happened to a charge, by reference. */
   verifyTransaction(reference: string) {
-    return paystackRequest<PaystackVerifyData>(`/transaction/verify/${encodeURIComponent(reference)}`);
+    return paystackRequest<PaystackVerifyData>(
+      `/transaction/verify/${encodeURIComponent(reference)}`,
+    );
   },
 
   /** Lists Nigerian banks Paystack supports, for populating a bank picker. */
@@ -111,11 +116,7 @@ export const paystackService = {
   },
 
   /** Registers a payout destination so we can send transfers to it. */
-  createTransferRecipient(params: {
-    name: string;
-    accountNumber: string;
-    bankCode: string;
-  }) {
+  createTransferRecipient(params: { name: string; accountNumber: string; bankCode: string }) {
     return paystackRequest<PaystackRecipientData>('/transferrecipient', {
       method: 'POST',
       body: {
@@ -129,7 +130,12 @@ export const paystackService = {
   },
 
   /** Sends money out of the Paystack balance to a previously-created recipient. */
-  initiateTransfer(params: { amountKobo: number; recipientCode: string; reference: string; reason?: string }) {
+  initiateTransfer(params: {
+    amountKobo: number;
+    recipientCode: string;
+    reference: string;
+    reason?: string;
+  }) {
     return paystackRequest<PaystackTransferData>('/transfer', {
       method: 'POST',
       body: {
