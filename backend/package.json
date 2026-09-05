@@ -1,5 +1,5 @@
 {
-  "name": "paystack-wallet-api",
+  "name": "terk-ewallet-api",
   "version": "1.0.0",
   "description": "Express + TypeScript + MongoDB wallet API backed by Paystack (funding via Charge, payouts via Transfer).",
   "main": "dist/index.js",
