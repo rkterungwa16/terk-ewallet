@@ -1,0 +1,539 @@
+/*
+  Design direction: a calm, legible ledger. The wallet's job is to make a
+  number (the balance) and a list (transactions) trustworthy and easy to
+  scan -- so the palette stays quiet and reserves emphasis for money moving
+  in vs. out, and for the one serif moment (the balance figure itself).
+
+  Color:    ink #10262B (chrome/nav), paper #F5F7F6 (background),
+            marigold #E2A72E (primary actions/emphasis), moss #2F7A4D
+            (credits/success), rust #C4432B (debits/error).
+  Type:     "Source Sans 3" for UI text, "Fraunces" (a serif with real
+            character) reserved for the balance figure only.
+  Layout:   fixed dark sidebar + light content area, left-aligned, narrow
+            (480px) single-column forms so line lengths stay short.
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Sans+3:wght@400;500;600&display=swap');
+
+:root {
+  --ink: #10262b;
+  --ink-soft: #1c3a41;
+  --paper: #f5f7f6;
+  --paper-raised: #ffffff;
+  --line: #dfe4e2;
+  --text: #1a1d1f;
+  --text-muted: #5b6664;
+  --marigold: #e2a72e;
+  --marigold-dark: #b8841c;
+  --moss: #2f7a4d;
+  --rust: #c4432b;
+  --radius: 10px;
+  --font-ui: 'Source Sans 3', system-ui, sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  color: var(--text);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--ink);
+}
+
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--marigold-dark);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- App shell ---------------------------------------------------- */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.app-shell__sidebar {
+  background: var(--ink);
+  color: #eef3f2;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 20px;
+}
+
+.app-shell__brand {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 32px;
+}
+
+.app-shell__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.app-shell__nav-link {
+  color: #c7d6d3;
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.app-shell__nav-link:hover {
+  background: var(--ink-soft);
+  color: #fff;
+}
+
+.app-shell__nav-link--active {
+  background: var(--ink-soft);
+  color: #fff;
+}
+
+.app-shell__footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-shell__account,
+.app-shell__customer {
+  font-size: 13px;
+  color: #c7d6d3;
+  word-break: break-word;
+}
+
+.app-shell__logout {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #eef3f2;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.app-shell__logout:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-shell__content {
+  padding: 40px 48px;
+  max-width: 960px;
+}
+
+/* ---- Cards / layout helpers ---------------------------------------- */
+
+.card {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.card__title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.narrow-page {
+  max-width: 480px;
+}
+
+.page-intro {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-top: -6px;
+  margin-bottom: 16px;
+}
+
+.page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40vh;
+}
+
+/* ---- Auth pages ------------------------------------------------------ */
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-page__switch {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 16px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ---- Form fields ------------------------------------------------------ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.field__input {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  background: var(--paper-raised);
+  color: var(--text);
+}
+
+.field__input:focus {
+  border-color: var(--marigold-dark);
+}
+
+.field__error {
+  color: var(--rust);
+  font-size: 12px;
+}
+
+/* ---- Buttons ------------------------------------------------------ */
+
+.btn {
+  border: none;
+  border-radius: 8px;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--marigold);
+  color: var(--ink);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--marigold-dark);
+}
+
+.btn--secondary {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: #ebefed;
+}
+
+.btn--danger {
+  background: var(--rust);
+  color: #fff;
+}
+
+/* ---- Alerts ------------------------------------------------------ */
+
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.alert__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.alert--success {
+  background: #e8f4ec;
+  color: var(--moss);
+}
+.alert--success .alert__icon {
+  background: var(--moss);
+  color: #fff;
+}
+
+.alert--error {
+  background: #fbebe8;
+  color: var(--rust);
+}
+.alert--error .alert__icon {
+  background: var(--rust);
+  color: #fff;
+}
+
+.alert--info {
+  background: #eef3f2;
+  color: var(--ink);
+}
+.alert--info .alert__icon {
+  background: var(--ink);
+  color: #fff;
+}
+
+/* ---- Balance card ------------------------------------------------------ */
+
+.balance-card__amount {
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 600;
+  margin: 0 0 20px;
+  color: var(--ink);
+}
+
+.balance-card__meta {
+  display: flex;
+  gap: 32px;
+  margin: 0;
+}
+
+.balance-card__meta dt {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.balance-card__meta dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ---- Transactions ------------------------------------------------------ */
+
+.transaction-filters {
+  display: flex;
+  gap: 12px;
+}
+
+.transaction-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.transaction-table th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.transaction-table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.transaction-row__operation {
+  text-transform: capitalize;
+}
+
+.transaction-row__amount--credit {
+  color: var(--moss);
+  font-weight: 600;
+}
+
+.transaction-row__amount--debit {
+  color: var(--rust);
+  font-weight: 600;
+}
+
+.transaction-row__reference {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.transaction-table-wrapper--pending {
+  opacity: 0.6;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.badge--success {
+  background: #e8f4ec;
+  color: var(--moss);
+}
+
+.badge--pending {
+  background: #fdf3e2;
+  color: var(--marigold-dark);
+}
+
+.badge--failed {
+  background: #fbebe8;
+  color: var(--rust);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.pagination__status {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---- Transfer preview -------------------------------------------------- */
+
+.transfer-form__preview {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 0;
+}
+
+/* ---- Bank accounts ------------------------------------------------------ */
+
+.bank-account-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bank-account-list__item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.bank-account-list__name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.bank-account-list__meta {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---- Empty state / spinner ------------------------------------------- */
+
+.empty-state {
+  padding: 24px 0;
+  text-align: center;
+}
+
+.empty-state__title {
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.empty-state__description {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.spinner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 16px 0;
+}
+
+.spinner__ring {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  border-top-color: var(--marigold-dark);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
