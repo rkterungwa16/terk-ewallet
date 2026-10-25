@@ -1,6 +1,7 @@
 import express, { Express } from 'express';
 import { v1Router } from '../routes/v1';
 import { webhookRouter } from '../routes/webhook.route';
+import { cors } from '../middlewares/cors.middleware';
 import { notFound } from '../middlewares/notFound.middleware';
 import { errorConverter, errorHandler } from '../middlewares/error.middleware';
 
@@ -8,6 +9,9 @@ export function createApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+
+  // must run before any route so preflight requests get CORS headers
+  app.use(cors);
 
   // Paystack webhooks must be verified against the *raw* request body, so
   // this route is mounted before express.json() touches the stream.

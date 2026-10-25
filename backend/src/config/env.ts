@@ -31,6 +31,12 @@ export const env = {
   paystackSecretKey: required('PAYSTACK_SECRET_KEY'),
   paystackPublicKey: optional('PAYSTACK_PUBLIC_KEY', ''),
   paystackCallbackUrl: optional('PAYSTACK_CALLBACK_URL', ''),
+
+  // comma-separated list of browser origins allowed to call the API
+  corsOrigins: optional('CORS_ORIGINS', 'http://localhost:5173')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 };
 
 export const isProduction = env.nodeEnv === 'production';
