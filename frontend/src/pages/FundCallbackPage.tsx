@@ -30,14 +30,16 @@ export default function FundCallbackPage() {
   }, [state]);
 
   return (
-    <div className="narrow-page">
+    <div className="page narrow-page">
       <Card title="Confirming your payment">
         {!reference && <Alert variant="error">No payment reference was provided.</Alert>}
         {reference && state.status === 'loading' && <Spinner label="Confirming with Paystack…" />}
         {reference && isError(state) && <Alert variant="error">{state.error.message}</Alert>}
         {reference && isSuccess(state) && <Alert variant="success">Your wallet has been credited.</Alert>}
-        <p className="page-intro">
-          <Link to="/">Back to dashboard</Link>
+        <p>
+          <Link to="/" className="card__link">
+            Back to dashboard
+          </Link>
         </p>
       </Card>
     </div>

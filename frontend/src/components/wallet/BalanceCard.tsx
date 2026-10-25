@@ -1,15 +1,12 @@
 import { memo } from 'react';
+import { Link } from 'react-router-dom';
 import type { Customer } from '../../types/domain';
-import { Card } from '../ui/Card';
-
-const nairaFormatter = new Intl.NumberFormat('en-NG', {
-  style: 'currency',
-  currency: 'NGN',
-  minimumFractionDigits: 2,
-});
+import { nairaFormatter } from '../../utils/format';
+import { Icon } from '../ui/Icon';
 
 interface BalanceCardProps {
   customer: Customer;
+  className?: string;
 }
 
 /**
@@ -25,20 +22,42 @@ interface BalanceCardProps {
  * AuthContext's `customer_updated` action), not mutated in place, that
  * shallow comparison is reliable here.
  */
-export const BalanceCard = memo(function BalanceCard({ customer }: BalanceCardProps) {
+export const BalanceCard = memo(function BalanceCard({ customer, className }: BalanceCardProps) {
   return (
-    <Card className="balance-card" title="Wallet balance">
+    <section
+      className={['card', 'balance-card', className].filter(Boolean).join(' ')}
+      aria-labelledby="balance-card-title"
+    >
+      <div className="balance-card__top">
+        <h2 id="balance-card-title" className="balance-card__label">
+          <Icon name="wallet" />
+          Available balance
+        </h2>
+        <span className="balance-card__pill">Acct {customer.accountNumber}</span>
+      </div>
+
       <p className="balance-card__amount">{nairaFormatter.format(customer.balanceNaira)}</p>
-      <dl className="balance-card__meta">
-        <div>
-          <dt>Account number</dt>
-          <dd>{customer.accountNumber}</dd>
-        </div>
-        <div>
-          <dt>Account name</dt>
-          <dd>{customer.name ?? customer.email}</dd>
-        </div>
-      </dl>
-    </Card>
+      <p className="balance-card__caption">Ready to spend, send or withdraw</p>
+
+      <div className="balance-card__actions">
+        <Link to="/transfer" className="btn btn--primary">
+          <Icon name="arrowUp" />
+          Send money
+        </Link>
+        <Link to="/fund" className="btn btn--light">
+          <Icon name="plus" />
+          Add money
+        </Link>
+        <Link to="/withdraw" className="btn btn--light">
+          <Icon name="withdraw" />
+          Withdraw
+        </Link>
+      </div>
+
+      <p className="balance-card__footnote">
+        <span>Account name</span>
+        <strong>{customer.name ?? customer.email}</strong>
+      </p>
+    </section>
   );
 });
