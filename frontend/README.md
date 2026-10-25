@@ -5,6 +5,9 @@ A React 19 + TypeScript + Vite frontend for the paystack-wallet-api backend.
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for a detailed walkthrough of every
 React hook and TypeScript pattern used, and why.
 
+See [docs/design](./docs/design/README.md) for the UI design system: visual
+principles, color, typography, layout, components and patterns.
+
 ## Setup
 
 ```bash
