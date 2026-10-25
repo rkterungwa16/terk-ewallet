@@ -1,6 +1,7 @@
 import {
   useCallback, useMemo, useState, useDeferredValue, useTransition,
 } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useApiRequest } from '../hooks/useApiRequest';
 import { walletApi } from '../api/endpoints';
 import { isError, isSuccess } from '../types/async';
@@ -11,6 +12,7 @@ import { Card } from '../components/ui/Card';
 import { Spinner } from '../components/ui/Spinner';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
+import { PageHeader } from '../components/ui/PageHeader';
 
 const PER_PAGE = 10;
 
@@ -22,9 +24,19 @@ export default function TransactionsPage() {
   const fetchAll = useCallback((signal: AbortSignal) => walletApi.transactions({ perPage: 200 }, signal), []);
   const { state } = useApiRequest(fetchAll, []);
 
-  const [search, setSearch] = useState('');
+  // The top bar's search box links here with `?q=`. Adopt a new query when
+  // it changes (adjusting state during render, not in an effect).
+  const [searchParams] = useSearchParams();
+  const urlQuery = searchParams.get('q') ?? '';
+  const [search, setSearch] = useState(urlQuery);
   const [operation, setOperation] = useState<OperationFilter>('all');
   const [page, setPage] = useState(1);
+  const [lastUrlQuery, setLastUrlQuery] = useState(urlQuery);
+  if (urlQuery !== lastUrlQuery) {
+    setLastUrlQuery(urlQuery);
+    setSearch(urlQuery);
+    setPage(1);
+  }
 
   /**
    * PERFORMANCE: useDeferredValue.
@@ -82,9 +94,14 @@ export default function TransactionsPage() {
   };
 
   return (
-    <div className="transactions-page">
-      <Card
+    <div className="page">
+      <PageHeader
+        eyebrow="History"
         title="Transactions"
+        description="Every deposit, withdrawal, transfer and reversal on your wallet."
+      />
+      <Card
+        title="All transactions"
         action={(
           <TransactionFilters
             search={search}
