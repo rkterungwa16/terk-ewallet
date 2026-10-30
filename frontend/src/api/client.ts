@@ -12,11 +12,23 @@ interface AppConfigShape {
   apiBaseUrl: string;
 }
 
+/**
+ * A base URL without a scheme (e.g. `api.example.com/v1`) is treated by
+ * `fetch` as a *relative* path and resolved against the page's own origin,
+ * producing `https://frontend.app/api.example.com/v1/...`. Default to
+ * https:// when the env var omits the scheme, and drop trailing slashes so
+ * `${apiBaseUrl}${path}` never yields `//`.
+ */
+function normalizeBaseUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 // Built-in utility type in action: `Immutable<T>` (our own mapped type,
 // defined in types/utility.ts) makes every property readonly, so nothing
 // downstream can accidentally reassign `config.apiBaseUrl`.
 const config: Immutable<AppConfigShape> = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/v1',
+  apiBaseUrl: normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/v1'),
 };
 
 /**
