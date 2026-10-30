@@ -1,11 +1,21 @@
 /**
  * Central place to read process.env.
  *
- * We don't ship a .env loader as a dependency: Node 20.6+ can load a .env
- * file natively via `node --env-file=.env dist/index.js` (see package.json
- * scripts). This module just validates and types what we read from
- * process.env once at boot.
+ * We don't ship a .env loader as a dependency: Node 20.12+ can load a .env
+ * file natively via process.loadEnvFile. The path is resolved from this file
+ * (not the working directory), so the server starts the same way no matter
+ * where it's launched from. Variables already set in the environment win.
+ * This module then validates and types what we read from process.env once
+ * at boot.
  */
+
+import { existsSync } from 'fs';
+import path from 'path';
+
+const envFile = path.resolve(__dirname, '../../.env');
+if (existsSync(envFile)) {
+  process.loadEnvFile(envFile);
+}
 
 function required(name: string): string {
   const value = process.env[name];

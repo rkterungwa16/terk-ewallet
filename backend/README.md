@@ -23,7 +23,7 @@ Node/JS APIs:
 | `http-status` | A plain constants object (`src/utils/httpStatus.ts`) |
 | `uuid` | `crypto.randomUUID()` |
 | `mongoose-auto-increment` | A tiny `$inc`-based counter collection (`src/models/counter.model.ts`) |
-| `dotenv-safe` | Node's native `--env-file` flag (Node 20.6+) |
+| `dotenv-safe` | Node's native `process.loadEnvFile` (Node 20.12+) |
 | `axios` / `request` for the gateway | Native `fetch` (`src/services/paystack.service.ts`) |
 | `morgan`, `helmet`, `cors`, `compression`, `method-override`, `bluebird` | Dropped, or a two-line replacement where actually needed |
 
@@ -37,7 +37,7 @@ boundary (`src/utils/money.ts`).
 
 ## Requirements
 
-- Node.js 20.6+ (for native `--env-file` support)
+- Node.js 20.12+ (for native `process.loadEnvFile` support)
 - MongoDB (local or Atlas)
 - A Paystack account with test API keys — https://dashboard.paystack.com/#/settings/developers
 
@@ -56,7 +56,7 @@ For local development with auto-rebuild/restart, run these in two terminals:
 
 ```bash
 npm run dev:build   # tsc --watch
-npm run dev          # node --watch --env-file=.env dist/index.js
+npm run dev          # node --watch dist/index.js
 ```
 
 ### Exposing your webhook locally
