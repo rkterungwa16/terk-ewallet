@@ -2,6 +2,7 @@ import express, { Express } from 'express';
 import { v1Router } from '../routes/v1';
 import { webhookRouter } from '../routes/webhook.route';
 import { cors } from '../middlewares/cors.middleware';
+import { requestLog } from '../middlewares/requestLog.middleware';
 import { notFound } from '../middlewares/notFound.middleware';
 import { errorConverter, errorHandler } from '../middlewares/error.middleware';
 
@@ -9,6 +10,9 @@ export function createApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+
+  // first, so every request (webhooks and preflights included) is timed
+  app.use(requestLog);
 
   // must run before any route so preflight requests get CORS headers
   app.use(cors);
@@ -20,13 +24,6 @@ export function createApp(): Express {
   // parse JSON bodies for everything else
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
-
-  // basic request log, no morgan dependency
-  app.use((req, _res, next) => {
-    // eslint-disable-next-line no-console
-    console.log(`${new Date().toISOString()} ${req.method} ${req.originalUrl}`);
-    next();
-  });
 
   app.get('/v1/status', (_req, res) => res.send('OK'));
 
