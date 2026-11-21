@@ -41,6 +41,8 @@ export const env = {
   paystackSecretKey: required('PAYSTACK_SECRET_KEY'),
   paystackPublicKey: optional('PAYSTACK_PUBLIC_KEY', ''),
   paystackCallbackUrl: optional('PAYSTACK_CALLBACK_URL', ''),
+  // how long to wait for any single Paystack API call before giving up
+  paystackTimeoutMs: Number(optional('PAYSTACK_TIMEOUT_MS', '10000')),
 
   // comma-separated list of browser origins allowed to call the API
   corsOrigins: optional('CORS_ORIGINS', 'http://localhost:5173')
