@@ -27,6 +27,16 @@ export interface ICustomer extends Document {
   toPublicJSON(): Record<string, unknown>;
 }
 
+/**
+ * The customer as loaded for each authenticated request: a plain object
+ * (no Mongoose document) without the password hash. Use `toPublicCustomer`
+ * to serialize it.
+ */
+export type AuthCustomer = Pick<
+  ICustomer,
+  'email' | 'name' | 'role' | 'accountNumber' | 'balanceKobo' | 'bankAccounts' | 'createdAt'
+> & { _id: Types.ObjectId };
+
 const bankAccountSchema = new Schema<IBankAccount>(
   {
     recipientCode: { type: String, required: true },
@@ -72,23 +82,28 @@ customerSchema.pre('save', async function assignAccountNumber(next) {
   }
 });
 
-customerSchema.methods.toPublicJSON = function toPublicJSON() {
+/** Shapes a customer (hydrated document or lean object) for API responses. */
+export function toPublicCustomer(c: AuthCustomer): Record<string, unknown> {
   return {
-    id: this._id,
-    accountNumber: this.accountNumber,
-    name: this.name,
-    email: this.email,
-    role: this.role,
-    balanceKobo: this.balanceKobo,
-    balanceNaira: this.balanceKobo / 100,
-    bankAccounts: this.bankAccounts.map((account: IBankAccount) => ({
+    id: c._id,
+    accountNumber: c.accountNumber,
+    name: c.name,
+    email: c.email,
+    role: c.role,
+    balanceKobo: c.balanceKobo,
+    balanceNaira: c.balanceKobo / 100,
+    bankAccounts: (c.bankAccounts ?? []).map((account: IBankAccount) => ({
       id: account._id,
       accountNumber: account.accountNumber,
       accountName: account.accountName,
       bankName: account.bankName,
     })),
-    createdAt: this.createdAt,
+    createdAt: c.createdAt,
   };
+}
+
+customerSchema.methods.toPublicJSON = function toPublicJSON() {
+  return toPublicCustomer(this as unknown as AuthCustomer);
 };
 
 export const Customer = model<ICustomer>('Customer', customerSchema);

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { Customer, ICustomer } from '../models/customer.model';
+import { AuthCustomer, Customer, toPublicCustomer } from '../models/customer.model';
 import {
   ITransaction,
   PUBLIC_TRANSACTION_FIELDS,
@@ -51,8 +51,8 @@ const BANK_LIST_TTL_MS = 24 * 60 * 60 * 1000;
 const getBanks = cachedValue(() => paystackService.listBanks(), BANK_LIST_TTL_MS);
 
 export const walletService = {
-  getBalance(customer: ICustomer) {
-    return customer.toPublicJSON();
+  getBalance(customer: AuthCustomer) {
+    return toPublicCustomer(customer);
   },
 
   async listTransactions(customerId: string, page = 1, perPage = 30) {
@@ -73,7 +73,7 @@ export const walletService = {
    * Paystack's inline/popup JS). Records a pending deposit transaction so
    * the ledger has an entry from the moment funding is attempted.
    */
-  async initializeFunding(customer: ICustomer, amountNaira: number) {
+  async initializeFunding(customer: AuthCustomer, amountNaira: number) {
     const amountKobo = nairaToKobo(amountNaira);
     const reference = newReference('dep');
 
@@ -159,12 +159,19 @@ export const walletService = {
   },
 
   /** Instant wallet-to-wallet transfer, no Paystack call involved. */
-  async internalTransfer(sender: ICustomer, destinationAccountNumber: number, amountNaira: number) {
+  async internalTransfer(
+    sender: AuthCustomer,
+    destinationAccountNumber: number,
+    amountNaira: number,
+  ) {
     if (sender.accountNumber === destinationAccountNumber) {
       throw new ApiError('You cannot transfer to your own account', httpStatus.BAD_REQUEST);
     }
 
-    const destination = await Customer.findOne({ accountNumber: destinationAccountNumber }).exec();
+    const destination = await Customer.findOne({ accountNumber: destinationAccountNumber })
+      .select('_id accountNumber')
+      .lean()
+      .exec();
     if (!destination) {
       throw new ApiError('Destination account not found', httpStatus.NOT_FOUND);
     }
@@ -211,7 +218,7 @@ export const walletService = {
   },
 
   /** Resolves + saves a bank account as a Paystack transfer recipient, for later payouts. */
-  async addBankAccount(customer: ICustomer, accountNumber: string, bankCode: string) {
+  async addBankAccount(customer: AuthCustomer, accountNumber: string, bankCode: string) {
     // The bank name is only a display label, so look it up alongside the
     // Paystack calls and fall back to the code rather than failing the save.
     const bankNamePromise = getBanks()
@@ -261,7 +268,7 @@ export const walletService = {
    * transfer may still go through, so it stays pending for the webhook to
    * settle rather than being refunded here.
    */
-  async withdraw(customer: ICustomer, amountNaira: number, bankAccountId: string) {
+  async withdraw(customer: AuthCustomer, amountNaira: number, bankAccountId: string) {
     const bankAccount = customer.bankAccounts.find((b) => String(b._id) === bankAccountId);
     if (!bankAccount) {
       throw new ApiError('Bank account not found on your profile', httpStatus.NOT_FOUND);
