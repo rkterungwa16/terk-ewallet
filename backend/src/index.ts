@@ -1,3 +1,5 @@
+// first: sizes the libuv threadpool before anything uses it
+import './config/threadpool';
 import { ServerResponse } from 'node:http';
 import mongoose from 'mongoose';
 import { env } from './config/env';

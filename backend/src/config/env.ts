@@ -57,6 +57,17 @@ export const env = {
   // remaining connections are cut and the process exits anyway
   shutdownTimeoutMs: Number(optional('SHUTDOWN_TIMEOUT_MS', '10000')),
 
+  // How many reverse proxies sit in front of the app (Railway's edge counts
+  // as one). Express then takes the client IP from X-Forwarded-For, skipping
+  // that many hops, so per-IP rate limits see real clients rather than the
+  // proxy. 0 = trust none and use the socket address (local development).
+  trustProxyHops: Number(optional('TRUST_PROXY', '0')),
+
+  // /v1/auth/* requests allowed per client IP per minute
+  authRateLimitPerMinute: Number(optional('AUTH_RATE_LIMIT_PER_MINUTE', '20')),
+  // failed logins allowed per email address per 15 minutes
+  loginFailuresPer15Min: Number(optional('LOGIN_FAILURES_PER_15_MIN', '10')),
+
   // comma-separated list of browser origins allowed to call the API
   corsOrigins: optional('CORS_ORIGINS', 'http://localhost:5173')
     .split(',')
