@@ -11,6 +11,7 @@ import { paystackService, PaystackUnavailableError, PaystackVerifyData } from '.
 import { ApiError } from '../utils/ApiError';
 import { httpStatus } from '../utils/httpStatus';
 import { nairaToKobo } from '../utils/money';
+import { cachedValue } from '../utils/cachedValue';
 
 function newReference(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
@@ -43,6 +44,11 @@ async function creditWallet(customerId: string, amountKobo: number) {
   }
   return updated;
 }
+
+// Paystack's bank list changes rarely; fetching it on every /banks request
+// and every bank-account save is pure latency.
+const BANK_LIST_TTL_MS = 24 * 60 * 60 * 1000;
+const getBanks = cachedValue(() => paystackService.listBanks(), BANK_LIST_TTL_MS);
 
 export const walletService = {
   getBalance(customer: ICustomer) {
@@ -201,31 +207,47 @@ export const walletService = {
   },
 
   async listBanks() {
-    return paystackService.listBanks();
+    return getBanks();
   },
 
   /** Resolves + saves a bank account as a Paystack transfer recipient, for later payouts. */
   async addBankAccount(customer: ICustomer, accountNumber: string, bankCode: string) {
+    // The bank name is only a display label, so look it up alongside the
+    // Paystack calls and fall back to the code rather than failing the save.
+    const bankNamePromise = getBanks()
+      .then((banks) => banks.find((b) => b.code === bankCode)?.name ?? bankCode)
+      .catch(() => bankCode);
+
     const resolved = await paystackService.resolveAccountNumber(accountNumber, bankCode);
     const recipient = await paystackService.createTransferRecipient({
       name: resolved.account_name,
       accountNumber,
       bankCode,
     });
+    const bankName = await bankNamePromise;
 
-    const banks = await paystackService.listBanks();
-    const bankName = banks.find((b) => b.code === bankCode)?.name ?? bankCode;
+    // $push writes just the new entry, instead of save() re-sending the
+    // document and racing with concurrent saves of the same customer.
+    const updated = await Customer.findByIdAndUpdate(
+      customer._id,
+      {
+        $push: {
+          bankAccounts: {
+            recipientCode: recipient.recipient_code,
+            accountNumber,
+            accountName: resolved.account_name,
+            bankCode,
+            bankName,
+          },
+        },
+      },
+      { new: true, runValidators: true },
+    ).exec();
 
-    customer.bankAccounts.push({
-      recipientCode: recipient.recipient_code,
-      accountNumber,
-      accountName: resolved.account_name,
-      bankCode,
-      bankName,
-    } as never);
-
-    await customer.save();
-    return customer.toPublicJSON();
+    if (!updated) {
+      throw new ApiError('Customer not found', httpStatus.NOT_FOUND);
+    }
+    return updated.toPublicJSON();
   },
 
   /**
