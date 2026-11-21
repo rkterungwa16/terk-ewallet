@@ -1,4 +1,5 @@
 import express, { Express } from 'express';
+import { env } from './env';
 import { v1Router } from '../routes/v1';
 import { webhookRouter } from '../routes/webhook.route';
 import { cors } from '../middlewares/cors.middleware';
@@ -10,6 +11,8 @@ export function createApp(): Express {
   const app = express();
 
   app.disable('x-powered-by');
+  // so req.ip is the real client behind the platform proxy (see TRUST_PROXY)
+  app.set('trust proxy', env.trustProxyHops);
 
   // first, so every request (webhooks and preflights included) is timed
   app.use(requestLog);
