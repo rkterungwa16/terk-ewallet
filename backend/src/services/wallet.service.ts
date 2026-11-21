@@ -7,7 +7,7 @@ import {
   toPublicTransaction,
 } from '../models/transaction.model';
 import { PaystackEvent } from '../models/paystack-event.model';
-import { paystackService, PaystackVerifyData } from './paystack.service';
+import { paystackService, PaystackUnavailableError, PaystackVerifyData } from './paystack.service';
 import { ApiError } from '../utils/ApiError';
 import { httpStatus } from '../utils/httpStatus';
 import { nairaToKobo } from '../utils/money';
@@ -235,7 +235,9 @@ export const walletService = {
    * debit is reversed immediately. If Paystack accepts it, final success or
    * failure arrives later via the transfer.success / transfer.failed / transfer.reversed
    * webhook, at which point the transaction is finalized (and refunded on
-   * failure).
+   * failure). If we never get an answer (timeout, network error), the
+   * transfer may still go through, so it stays pending for the webhook to
+   * settle rather than being refunded here.
    */
   async withdraw(customer: ICustomer, amountNaira: number, bankAccountId: string) {
     const bankAccount = customer.bankAccounts.find((b) => String(b._id) === bankAccountId);
@@ -274,6 +276,18 @@ export const walletService = {
       }
       await transaction.save();
     } catch (err) {
+      if (err instanceof PaystackUnavailableError) {
+        // Outcome unknown: Paystack may have accepted the transfer before
+        // we stopped waiting. Refunding now could pay the customer twice,
+        // so leave it pending; the transfer.* webhook will settle it.
+        // eslint-disable-next-line no-console
+        console.error(`withdrawal ${reference}: ${err.message}; left pending`);
+        return {
+          transaction: transaction.toPublicJSON(),
+          customer: debitedCustomer.toPublicJSON(),
+        };
+      }
+
       // Paystack refused the transfer outright — refund immediately rather
       // than leaving the customer's funds stuck in limbo.
       await creditWallet(String(customer._id), amountKobo);

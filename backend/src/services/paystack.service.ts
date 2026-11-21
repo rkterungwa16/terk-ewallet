@@ -10,24 +10,62 @@ interface PaystackResponse<T> {
   data: T;
 }
 
+/**
+ * Thrown when we never got a usable answer from Paystack: the call timed
+ * out, the connection failed, or the reply couldn't be parsed. Unlike a
+ * normal ApiError from Paystack rejecting a request, the outcome is
+ * *unknown* — Paystack may still have acted on it — so callers that move
+ * money must not treat this as a refusal.
+ */
+export class PaystackUnavailableError extends ApiError {}
+
+function isTimeout(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name;
+  return name === 'TimeoutError' || name === 'AbortError';
+}
+
 async function paystackRequest<T>(
   path: string,
   options: { method?: string; body?: Record<string, unknown> } = {},
 ): Promise<T> {
-  const res = await fetch(`${PAYSTACK_BASE_URL}${path}`, {
-    method: options.method ?? 'GET',
-    headers: {
-      Authorization: `Bearer ${env.paystackSecretKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  // One deadline covers connecting, waiting for headers and reading the body.
+  const signal = AbortSignal.timeout(env.paystackTimeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(`${PAYSTACK_BASE_URL}${path}`, {
+      method: options.method ?? 'GET',
+      headers: {
+        Authorization: `Bearer ${env.paystackSecretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      signal,
+    });
+  } catch (err) {
+    if (isTimeout(err)) {
+      throw new PaystackUnavailableError(
+        'Paystack took too long to respond',
+        httpStatus.GATEWAY_TIMEOUT,
+      );
+    }
+    throw new PaystackUnavailableError('Could not reach Paystack', httpStatus.BAD_GATEWAY);
+  }
 
   let json: PaystackResponse<T>;
   try {
     json = (await res.json()) as PaystackResponse<T>;
-  } catch {
-    throw new ApiError('Received an invalid response from Paystack', httpStatus.BAD_GATEWAY);
+  } catch (err) {
+    if (isTimeout(err)) {
+      throw new PaystackUnavailableError(
+        'Paystack took too long to respond',
+        httpStatus.GATEWAY_TIMEOUT,
+      );
+    }
+    throw new PaystackUnavailableError(
+      'Received an invalid response from Paystack',
+      httpStatus.BAD_GATEWAY,
+    );
   }
 
   if (!res.ok || json.status === false) {

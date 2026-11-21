@@ -11,4 +11,5 @@ export const httpStatus = {
   UNPROCESSABLE_ENTITY: 422,
   INTERNAL_SERVER_ERROR: 500,
   BAD_GATEWAY: 502,
+  GATEWAY_TIMEOUT: 504,
 } as const;
