@@ -300,24 +300,33 @@ export const walletService = {
   },
 
   /**
-   * Finalizes a withdrawal once Paystack tells us, asynchronously, whether
-   * the transfer actually landed. Called from the webhook handler.
+   * Finalizes a withdrawal once we know, asynchronously, whether the
+   * transfer actually landed. Called from the transfer.* webhook and from
+   * the pending-withdrawal reconciler, possibly at the same time for the
+   * same reference.
+   *
+   * The pending -> final transition is a single conditional update, so only
+   * one caller can win it, and only the winner refunds. Returns true if this
+   * call settled the withdrawal, false if it was already settled (or isn't
+   * one of ours).
    */
-  async resolveWithdrawal(reference: string, outcome: 'success' | 'failed' | 'reversed') {
-    const transaction = await Transaction.findOne({ reference, operation: 'withdrawal' }).exec();
-    if (!transaction || transaction.status !== 'pending') {
-      return; // already handled, or not one of ours
+  async resolveWithdrawal(
+    reference: string,
+    outcome: 'success' | 'failed' | 'reversed',
+  ): Promise<boolean> {
+    const settled = await Transaction.findOneAndUpdate(
+      { reference, operation: 'withdrawal', status: 'pending' },
+      { $set: { status: outcome === 'success' ? 'success' : 'failed' } },
+      { new: true },
+    ).exec();
+    if (!settled) {
+      return false; // already handled, or not one of ours
     }
 
-    if (outcome === 'success') {
-      transaction.status = 'success';
-      await transaction.save();
-      return;
+    if (outcome !== 'success') {
+      // failed or reversed: give the money back
+      await creditWallet(String(settled.customer), Math.abs(settled.amountKobo));
     }
-
-    // failed or reversed: give the money back
-    await creditWallet(String(transaction.customer), Math.abs(transaction.amountKobo));
-    transaction.status = 'failed';
-    await transaction.save();
+    return true;
   },
 };

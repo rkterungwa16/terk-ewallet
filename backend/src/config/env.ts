@@ -43,6 +43,10 @@ export const env = {
   paystackCallbackUrl: optional('PAYSTACK_CALLBACK_URL', ''),
   // how long to wait for any single Paystack API call before giving up
   paystackTimeoutMs: Number(optional('PAYSTACK_TIMEOUT_MS', '10000')),
+  // how often to check withdrawals stuck in pending against Paystack (0 disables)
+  reconcileIntervalMs: Number(optional('RECONCILE_INTERVAL_MS', '300000')),
+  // how old a pending withdrawal must be before the reconciler looks at it
+  reconcileMinAgeMs: Number(optional('RECONCILE_MIN_AGE_MS', '900000')),
 
   // comma-separated list of browser origins allowed to call the API
   corsOrigins: optional('CORS_ORIGINS', 'http://localhost:5173')

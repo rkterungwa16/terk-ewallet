@@ -50,6 +50,13 @@ const transactionSchema = new Schema<ITransaction>(
 // covers plain lookups by customer, so that field needs no index of its own.
 transactionSchema.index({ customer: 1, createdAt: -1 });
 
+// Serves the pending-withdrawal reconciler. Partial, so it only holds the
+// few withdrawals still pending rather than the whole ledger.
+transactionSchema.index(
+  { operation: 1, status: 1, _id: 1 },
+  { partialFilterExpression: { operation: 'withdrawal', status: 'pending' } },
+);
+
 /** Fields `toPublicTransaction` reads; use as a projection on lean queries. */
 export const PUBLIC_TRANSACTION_FIELDS =
   'accountNumber destinationAccountNumber operation channel amountKobo status reference createdAt';
