@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { ClientSession } from 'mongoose';
 import { AuthCustomer, Customer, toPublicCustomer } from '../models/customer.model';
 import {
   ITransaction,
@@ -12,17 +13,18 @@ import { ApiError } from '../utils/ApiError';
 import { httpStatus } from '../utils/httpStatus';
 import { nairaToKobo } from '../utils/money';
 import { cachedValue } from '../utils/cachedValue';
+import { withTransaction } from '../config/transactions';
 
 function newReference(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 
 /** Atomically debits a wallet, refusing the update if funds are insufficient. */
-async function debitWallet(customerId: string, amountKobo: number) {
+async function debitWallet(customerId: string, amountKobo: number, session?: ClientSession) {
   const updated = await Customer.findOneAndUpdate(
     { _id: customerId, balanceKobo: { $gte: amountKobo } },
     { $inc: { balanceKobo: -amountKobo } },
-    { new: true },
+    { new: true, session },
   ).exec();
 
   if (!updated) {
@@ -32,11 +34,11 @@ async function debitWallet(customerId: string, amountKobo: number) {
 }
 
 /** Atomically credits a wallet. */
-async function creditWallet(customerId: string, amountKobo: number) {
+async function creditWallet(customerId: string, amountKobo: number, session?: ClientSession) {
   const updated = await Customer.findByIdAndUpdate(
     customerId,
     { $inc: { balanceKobo: amountKobo } },
-    { new: true },
+    { new: true, session },
   ).exec();
 
   if (!updated) {
@@ -185,14 +187,34 @@ export const walletService = {
       );
     }
 
-    // Guard against double-processing if the webhook and the verify
-    // endpoint both resolve at roughly the same time.
+    // The idempotency marker, the credit and the ledger update commit
+    // together: a crash can't leave the marker written (blocking any retry)
+    // with the wallet never credited.
     try {
-      await PaystackEvent.create({
-        event: 'charge.success',
-        reference,
-        rawPayload: verified as unknown as Record<string, unknown>,
+      const customer = await withTransaction(async (session) => {
+        // Guards against double-processing if the webhook and the verify
+        // endpoint both resolve at roughly the same time.
+        await PaystackEvent.create(
+          [
+            {
+              event: 'charge.success',
+              reference,
+              rawPayload: verified as unknown as Record<string, unknown>,
+            },
+          ],
+          { session },
+        );
+        const credited = await creditWallet(
+          String(transaction.customer),
+          transaction.amountKobo,
+          session,
+        );
+        transaction.status = 'success';
+        transaction.balanceAfterKobo = credited.balanceKobo;
+        await transaction.save({ session });
+        return credited;
       });
+      return { transaction: transaction.toPublicJSON(), customer: customer.toPublicJSON() };
     } catch (err) {
       const alreadyProcessed = (err as { code?: number }).code === 11000;
       if (alreadyProcessed) {
@@ -210,13 +232,6 @@ export const walletService = {
       }
       throw err;
     }
-
-    const customer = await creditWallet(String(transaction.customer), transaction.amountKobo);
-    transaction.status = 'success';
-    transaction.balanceAfterKobo = customer.balanceKobo;
-    await transaction.save();
-
-    return { transaction: transaction.toPublicJSON(), customer: customer.toPublicJSON() };
   },
 
   /** Instant wallet-to-wallet transfer, no Paystack call involved. */
@@ -240,32 +255,40 @@ export const walletService = {
     const amountKobo = nairaToKobo(amountNaira);
     const reference = newReference('trf');
 
-    const debitedSender = await debitWallet(String(sender._id), amountKobo);
-
-    const senderTransaction = await Transaction.create({
-      customer: sender._id,
-      accountNumber: sender.accountNumber,
-      destinationAccountNumber,
-      operation: 'transfer',
-      channel: 'internal',
-      amountKobo: -amountKobo,
-      balanceAfterKobo: debitedSender.balanceKobo,
-      reference,
-      status: 'success',
-    });
-
-    const creditedDestination = await creditWallet(String(destination._id), amountKobo);
-
-    await Transaction.create({
-      customer: destination._id,
-      accountNumber: destination.accountNumber,
-      destinationAccountNumber: sender.accountNumber,
-      operation: 'transfer',
-      channel: 'internal',
-      amountKobo,
-      balanceAfterKobo: creditedDestination.balanceKobo,
-      reference: `${reference}_credit`,
-      status: 'success',
+    // Debit, credit and both ledger rows commit together, so a crash
+    // between them can't take money out of one wallet without it arriving
+    // in the other.
+    const { debitedSender, senderTransaction } = await withTransaction(async (session) => {
+      const debited = await debitWallet(String(sender._id), amountKobo, session);
+      const credited = await creditWallet(String(destination._id), amountKobo, session);
+      const [senderRow] = await Transaction.insertMany(
+        [
+          {
+            customer: sender._id,
+            accountNumber: sender.accountNumber,
+            destinationAccountNumber,
+            operation: 'transfer',
+            channel: 'internal',
+            amountKobo: -amountKobo,
+            balanceAfterKobo: debited.balanceKobo,
+            reference,
+            status: 'success',
+          },
+          {
+            customer: destination._id,
+            accountNumber: destination.accountNumber,
+            destinationAccountNumber: sender.accountNumber,
+            operation: 'transfer',
+            channel: 'internal',
+            amountKobo,
+            balanceAfterKobo: credited.balanceKobo,
+            reference: `${reference}_credit`,
+            status: 'success',
+          },
+        ],
+        { session },
+      );
+      return { debitedSender: debited, senderTransaction: senderRow };
     });
 
     return {
@@ -338,18 +361,28 @@ export const walletService = {
     const amountKobo = nairaToKobo(amountNaira);
     const reference = newReference('wdr');
 
-    const debitedCustomer = await debitWallet(String(customer._id), amountKobo);
-
-    const transaction = await Transaction.create({
-      customer: customer._id,
-      accountNumber: customer.accountNumber,
-      operation: 'withdrawal',
-      channel: 'paystack',
-      amountKobo: -amountKobo,
-      balanceAfterKobo: debitedCustomer.balanceKobo,
-      reference,
-      status: 'pending',
-      meta: { bankAccountId, recipientCode: bankAccount.recipientCode },
+    // Debit and pending ledger row commit together, so every debit has a
+    // ledger entry the reconciler can find. Paystack is called after
+    // commit: a transaction must never stay open across a slow external call.
+    const { debitedCustomer, transaction } = await withTransaction(async (session) => {
+      const debited = await debitWallet(String(customer._id), amountKobo, session);
+      const [row] = await Transaction.create(
+        [
+          {
+            customer: customer._id,
+            accountNumber: customer.accountNumber,
+            operation: 'withdrawal',
+            channel: 'paystack',
+            amountKobo: -amountKobo,
+            balanceAfterKobo: debited.balanceKobo,
+            reference,
+            status: 'pending',
+            meta: { bankAccountId, recipientCode: bankAccount.recipientCode },
+          },
+        ],
+        { session },
+      );
+      return { debitedCustomer: debited, transaction: row };
     });
 
     try {
@@ -378,11 +411,14 @@ export const walletService = {
         };
       }
 
-      // Paystack refused the transfer outright — refund immediately rather
-      // than leaving the customer's funds stuck in limbo.
-      await creditWallet(String(customer._id), amountKobo);
-      transaction.status = 'failed';
-      await transaction.save();
+      // Paystack refused the transfer outright, so refund now rather than
+      // leaving the customer's funds stuck. The refund and the failed
+      // status commit together.
+      await withTransaction(async (session) => {
+        await creditWallet(String(customer._id), amountKobo, session);
+        transaction.status = 'failed';
+        await transaction.save({ session });
+      });
       throw err;
     }
 
@@ -404,19 +440,23 @@ export const walletService = {
     reference: string,
     outcome: 'success' | 'failed' | 'reversed',
   ): Promise<boolean> {
-    const settled = await Transaction.findOneAndUpdate(
-      { reference, operation: 'withdrawal', status: 'pending' },
-      { $set: { status: outcome === 'success' ? 'success' : 'failed' } },
-      { new: true },
-    ).exec();
-    if (!settled) {
-      return false; // already handled, or not one of ours
-    }
+    // Settling and refunding commit together: a crash between them can't
+    // mark a withdrawal failed without the money coming back.
+    return withTransaction(async (session) => {
+      const settled = await Transaction.findOneAndUpdate(
+        { reference, operation: 'withdrawal', status: 'pending' },
+        { $set: { status: outcome === 'success' ? 'success' : 'failed' } },
+        { new: true, session },
+      ).exec();
+      if (!settled) {
+        return false; // already handled, or not one of ours
+      }
 
-    if (outcome !== 'success') {
-      // failed or reversed: give the money back
-      await creditWallet(String(settled.customer), Math.abs(settled.amountKobo));
-    }
-    return true;
+      if (outcome !== 'success') {
+        // failed or reversed: give the money back
+        await creditWallet(String(settled.customer), Math.abs(settled.amountKobo), session);
+      }
+      return true;
+    });
   },
 };
