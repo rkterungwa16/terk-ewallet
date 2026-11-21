@@ -50,6 +50,15 @@ async function creditWallet(customerId: string, amountKobo: number) {
 const BANK_LIST_TTL_MS = 24 * 60 * 60 * 1000;
 const getBanks = cachedValue(() => paystackService.listBanks(), BANK_LIST_TTL_MS);
 
+/** A customer's public profile by id, read lean and without the password hash. */
+async function publicCustomerById(id: unknown) {
+  const customer = await Customer.findById(id).select('-passwordHash').lean<AuthCustomer>().exec();
+  return customer ? toPublicCustomer(customer) : undefined;
+}
+
+// Paystack charge statuses after which a charge can never succeed
+const FINAL_FAILURE_STATUSES: readonly string[] = ['failed', 'reversed'];
+
 export const walletService = {
   getBalance(customer: AuthCustomer) {
     return toPublicCustomer(customer);
@@ -118,17 +127,31 @@ export const walletService = {
       throw new ApiError('Unknown transaction reference', httpStatus.NOT_FOUND);
     }
 
+    // Settled deposits are answered from the database, without asking
+    // Paystack again.
     if (transaction.status === 'success') {
-      const customer = await Customer.findById(transaction.customer).exec();
-      return { transaction: transaction.toPublicJSON(), customer: customer?.toPublicJSON() };
+      return {
+        transaction: transaction.toPublicJSON(),
+        customer: await publicCustomerById(transaction.customer),
+      };
+    }
+    // A failed charge can't turn into a success, so re-polling it needs no
+    // Paystack call either. Only the signed webhook (`signedCharge`) is
+    // allowed past this, since it is Paystack itself reporting success.
+    if (transaction.status === 'failed' && !signedCharge) {
+      throw new ApiError('Payment was not successful', httpStatus.PAYMENT_REQUIRED);
     }
 
     const verified: PaystackVerifyData =
       signedCharge ?? (await paystackService.verifyTransaction(reference));
 
     if (verified.status !== 'success') {
-      transaction.status = 'failed';
-      await transaction.save();
+      // Mark failed only when it's final. An abandoned or in-progress charge
+      // stays pending, because the customer can still go back and pay.
+      if (FINAL_FAILURE_STATUSES.includes(verified.status)) {
+        transaction.status = 'failed';
+        await transaction.save();
+      }
       throw new ApiError(
         `Payment was not successful (status: ${verified.status})`,
         httpStatus.PAYMENT_REQUIRED,
@@ -155,11 +178,16 @@ export const walletService = {
     } catch (err) {
       const alreadyProcessed = (err as { code?: number }).code === 11000;
       if (alreadyProcessed) {
-        const freshTransaction = await Transaction.findOne({ reference }).exec();
-        const customer = await Customer.findById(transaction.customer).exec();
+        const [freshTransaction, customer] = await Promise.all([
+          Transaction.findOne({ reference })
+            .select(PUBLIC_TRANSACTION_FIELDS)
+            .lean<ITransaction>()
+            .exec(),
+          publicCustomerById(transaction.customer),
+        ]);
         return {
-          transaction: freshTransaction?.toPublicJSON(),
-          customer: customer?.toPublicJSON(),
+          transaction: freshTransaction ? toPublicTransaction(freshTransaction) : undefined,
+          customer,
         };
       }
       throw err;

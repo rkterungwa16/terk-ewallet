@@ -87,7 +87,17 @@ export interface PaystackInitializeData {
 }
 
 export interface PaystackVerifyData {
-  status: 'success' | 'failed' | 'abandoned';
+  // 'success', 'failed' and 'reversed' are final; the rest mean the customer
+  // hasn't finished paying yet and the charge can still succeed
+  status:
+    | 'success'
+    | 'failed'
+    | 'reversed'
+    | 'abandoned'
+    | 'ongoing'
+    | 'pending'
+    | 'processing'
+    | 'queued';
   reference: string;
   amount: number; // kobo
   paid_at: string | null;
