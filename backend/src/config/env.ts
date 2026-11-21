@@ -48,6 +48,15 @@ export const env = {
   // how old a pending withdrawal must be before the reconciler looks at it
   reconcileMinAgeMs: Number(optional('RECONCILE_MIN_AGE_MS', '900000')),
 
+  // Keep idle keep-alive sockets open longer than the platform proxy does,
+  // so the proxy never reuses a socket Node has just closed (a classic
+  // source of intermittent 502s). Node's default is 5s; most proxies and
+  // load balancers idle out at 60s.
+  keepAliveTimeoutMs: Number(optional('KEEP_ALIVE_TIMEOUT_MS', '65000')),
+  // On SIGTERM/SIGINT, how long in-flight requests get to finish before
+  // remaining connections are cut and the process exits anyway
+  shutdownTimeoutMs: Number(optional('SHUTDOWN_TIMEOUT_MS', '10000')),
+
   // comma-separated list of browser origins allowed to call the API
   corsOrigins: optional('CORS_ORIGINS', 'http://localhost:5173')
     .split(',')

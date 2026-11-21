@@ -102,10 +102,16 @@ export async function reconcilePendingWithdrawals(minAgeMs: number): Promise<Rec
 /**
  * Runs the reconciler every `intervalMs` inside this process. Runs never
  * overlap: a tick that fires while the previous run is still going is
- * skipped. Returns a function that stops the timer.
+ * skipped. Returns a stop function that clears the timer and resolves once
+ * any run already in progress has finished, so shutdown never disconnects
+ * the database mid-settlement.
  */
-export function startWithdrawalReconciler(intervalMs: number, minAgeMs: number): () => void {
+export function startWithdrawalReconciler(
+  intervalMs: number,
+  minAgeMs: number,
+): () => Promise<void> {
   let running = false;
+  let current: Promise<void> = Promise.resolve();
 
   const tick = async () => {
     if (running) return;
@@ -124,7 +130,14 @@ export function startWithdrawalReconciler(intervalMs: number, minAgeMs: number):
     }
   };
 
-  const timer = setInterval(() => void tick(), intervalMs);
+  const timer = setInterval(() => {
+    // tick() is a no-op while a run is in progress; keep pointing at the
+    // real run so stop() waits for it
+    if (!running) current = tick();
+  }, intervalMs);
   timer.unref();
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    return current;
+  };
 }
