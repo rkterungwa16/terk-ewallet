@@ -106,8 +106,13 @@ export const walletService = {
    * hasn't already been credited. Safe to call multiple times for the same
    * reference — called both from the client-side "verify" polling endpoint
    * and from the charge.success webhook, whichever arrives first wins.
+   *
+   * The webhook passes `signedCharge`: the charge data from its payload,
+   * already authenticated by Paystack's HMAC signature. That is as
+   * trustworthy as a verify call, so it is used directly and the webhook
+   * path never waits on Paystack's API. Without it, Paystack is asked.
    */
-  async confirmFunding(reference: string) {
+  async confirmFunding(reference: string, signedCharge?: PaystackVerifyData) {
     const transaction = await Transaction.findOne({ reference, operation: 'deposit' }).exec();
     if (!transaction) {
       throw new ApiError('Unknown transaction reference', httpStatus.NOT_FOUND);
@@ -118,7 +123,8 @@ export const walletService = {
       return { transaction: transaction.toPublicJSON(), customer: customer?.toPublicJSON() };
     }
 
-    const verified: PaystackVerifyData = await paystackService.verifyTransaction(reference);
+    const verified: PaystackVerifyData =
+      signedCharge ?? (await paystackService.verifyTransaction(reference));
 
     if (verified.status !== 'success') {
       transaction.status = 'failed';
@@ -126,6 +132,15 @@ export const walletService = {
       throw new ApiError(
         `Payment was not successful (status: ${verified.status})`,
         httpStatus.PAYMENT_REQUIRED,
+      );
+    }
+
+    // Credit what we asked Paystack to charge, and only if that is what was
+    // paid. Left pending (not failed) so a mismatch can be looked into.
+    if (verified.amount !== transaction.amountKobo || verified.currency !== 'NGN') {
+      throw new ApiError(
+        `Paid ${verified.amount} ${verified.currency} does not match the expected ${transaction.amountKobo} NGN`,
+        httpStatus.CONFLICT,
       );
     }
 
