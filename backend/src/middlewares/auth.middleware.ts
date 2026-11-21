@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
-import { Customer, CustomerRole } from '../models/customer.model';
+import { AuthCustomer, Customer, CustomerRole } from '../models/customer.model';
 import { jwt } from '../utils/jwt';
 import { env } from '../config/env';
 import { ApiError } from '../utils/ApiError';
@@ -27,7 +27,12 @@ export function authenticate(...allowedRoles: CustomerRole[]) {
       throw new ApiError((err as Error).message || 'Unauthorized', httpStatus.UNAUTHORIZED);
     }
 
-    const customer = await Customer.findById(payload.sub).exec();
+    // Runs on every authenticated request: return a plain object and leave
+    // the password hash in the database.
+    const customer = await Customer.findById(payload.sub)
+      .select('-passwordHash')
+      .lean<AuthCustomer>()
+      .exec();
     if (!customer) {
       throw new ApiError('Unauthorized', httpStatus.UNAUTHORIZED);
     }
