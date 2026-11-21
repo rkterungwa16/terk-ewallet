@@ -13,7 +13,6 @@ const paystackEventSchema = new Schema<IPaystackEvent>({
     type: String,
     required: true,
     unique: true,
-    index: true,
   },
   rawPayload: { type: Schema.Types.Mixed, required: true },
   processedAt: { type: Date, default: Date.now },

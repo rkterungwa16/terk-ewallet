@@ -54,7 +54,6 @@ const customerSchema = new Schema<ICustomer>(
     accountNumber: {
       type: Number,
       unique: true,
-      index: true,
     },
     balanceKobo: { type: Number, default: 0, min: 0 },
     bankAccounts: { type: [bankAccountSchema], default: [] },

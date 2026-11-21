@@ -6,9 +6,22 @@ export const getBalance = (req: Request, res: Response): void => {
   res.json(walletService.getBalance(req.customer!));
 };
 
+const DEFAULT_PER_PAGE = 30;
+// the frontend asks for up to 200 rows at once (dashboard insights + the transactions page)
+const MAX_PER_PAGE = 200;
+// keeps .skip() from walking arbitrarily deep into a customer's history
+const MAX_PAGE = 1000;
+
+/** Reads a positive integer query param, falling back on missing/invalid input and capping at `max`. */
+function parsePositiveInt(value: unknown, fallback: number, max: number): number {
+  const n = typeof value === 'string' ? Number.parseInt(value, 10) : NaN;
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(n, max);
+}
+
 export const getTransactions = asyncHandler(async (req: Request, res: Response) => {
-  const page = req.query.page ? Number(req.query.page) : 1;
-  const perPage = req.query.perPage ? Number(req.query.perPage) : 30;
+  const page = parsePositiveInt(req.query.page, 1, MAX_PAGE);
+  const perPage = parsePositiveInt(req.query.perPage, DEFAULT_PER_PAGE, MAX_PER_PAGE);
   const transactions = await walletService.listTransactions(
     String(req.customer!._id),
     page,
