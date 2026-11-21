@@ -36,7 +36,9 @@ export const initializeFunding = asyncHandler(async (req: Request, res: Response
 });
 
 export const confirmFunding = asyncHandler(async (req: Request, res: Response) => {
-  const result = await walletService.confirmFunding(req.params.reference);
+  const result = await walletService.confirmFunding(req.params.reference, {
+    customerId: String(req.customer!._id),
+  });
   res.json(result);
 });
 

@@ -50,6 +50,23 @@ async function creditWallet(customerId: string, amountKobo: number) {
 const BANK_LIST_TTL_MS = 24 * 60 * 60 * 1000;
 const getBanks = cachedValue(() => paystackService.listBanks(), BANK_LIST_TTL_MS);
 
+/** A customer's public profile by id, read lean and without the password hash. */
+async function publicCustomerById(id: unknown) {
+  const customer = await Customer.findById(id).select('-passwordHash').lean<AuthCustomer>().exec();
+  return customer ? toPublicCustomer(customer) : undefined;
+}
+
+// Paystack charge statuses after which a charge can never succeed
+const FINAL_FAILURE_STATUSES: readonly string[] = ['failed', 'reversed'];
+
+/**
+ * Who is confirming a deposit. A customer may only confirm their own
+ * deposits. The Paystack webhook may confirm any deposit, and carries the
+ * signed charge data. Each caller must pick one, so a new caller can't
+ * forget the ownership check.
+ */
+export type FundingConfirmer = { customerId: string } | { signedCharge: PaystackVerifyData };
+
 export const walletService = {
   getBalance(customer: AuthCustomer) {
     return toPublicCustomer(customer);
@@ -107,28 +124,52 @@ export const walletService = {
    * reference — called both from the client-side "verify" polling endpoint
    * and from the charge.success webhook, whichever arrives first wins.
    *
+   * A customer (`customerId`) can only confirm their own deposits.
+   *
    * The webhook passes `signedCharge`: the charge data from its payload,
    * already authenticated by Paystack's HMAC signature. That is as
    * trustworthy as a verify call, so it is used directly and the webhook
    * path never waits on Paystack's API. Without it, Paystack is asked.
    */
-  async confirmFunding(reference: string, signedCharge?: PaystackVerifyData) {
-    const transaction = await Transaction.findOne({ reference, operation: 'deposit' }).exec();
+  async confirmFunding(reference: string, confirmer: FundingConfirmer) {
+    const signedCharge = 'signedCharge' in confirmer ? confirmer.signedCharge : undefined;
+    // Someone else's reference gets the same 404 as an unknown one, so this
+    // endpoint can't be used to probe which references exist.
+    const ownerFilter = 'customerId' in confirmer ? { customer: confirmer.customerId } : {};
+    const transaction = await Transaction.findOne({
+      reference,
+      operation: 'deposit',
+      ...ownerFilter,
+    }).exec();
     if (!transaction) {
       throw new ApiError('Unknown transaction reference', httpStatus.NOT_FOUND);
     }
 
+    // Settled deposits are answered from the database, without asking
+    // Paystack again.
     if (transaction.status === 'success') {
-      const customer = await Customer.findById(transaction.customer).exec();
-      return { transaction: transaction.toPublicJSON(), customer: customer?.toPublicJSON() };
+      return {
+        transaction: transaction.toPublicJSON(),
+        customer: await publicCustomerById(transaction.customer),
+      };
+    }
+    // A failed charge can't turn into a success, so re-polling it needs no
+    // Paystack call either. Only the signed webhook (`signedCharge`) is
+    // allowed past this, since it is Paystack itself reporting success.
+    if (transaction.status === 'failed' && !signedCharge) {
+      throw new ApiError('Payment was not successful', httpStatus.PAYMENT_REQUIRED);
     }
 
     const verified: PaystackVerifyData =
       signedCharge ?? (await paystackService.verifyTransaction(reference));
 
     if (verified.status !== 'success') {
-      transaction.status = 'failed';
-      await transaction.save();
+      // Mark failed only when it's final. An abandoned or in-progress charge
+      // stays pending, because the customer can still go back and pay.
+      if (FINAL_FAILURE_STATUSES.includes(verified.status)) {
+        transaction.status = 'failed';
+        await transaction.save();
+      }
       throw new ApiError(
         `Payment was not successful (status: ${verified.status})`,
         httpStatus.PAYMENT_REQUIRED,
@@ -155,11 +196,16 @@ export const walletService = {
     } catch (err) {
       const alreadyProcessed = (err as { code?: number }).code === 11000;
       if (alreadyProcessed) {
-        const freshTransaction = await Transaction.findOne({ reference }).exec();
-        const customer = await Customer.findById(transaction.customer).exec();
+        const [freshTransaction, customer] = await Promise.all([
+          Transaction.findOne({ reference })
+            .select(PUBLIC_TRANSACTION_FIELDS)
+            .lean<ITransaction>()
+            .exec(),
+          publicCustomerById(transaction.customer),
+        ]);
         return {
-          transaction: freshTransaction?.toPublicJSON(),
-          customer: customer?.toPublicJSON(),
+          transaction: freshTransaction ? toPublicTransaction(freshTransaction) : undefined,
+          customer,
         };
       }
       throw err;
