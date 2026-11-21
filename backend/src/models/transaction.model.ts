@@ -27,7 +27,6 @@ const transactionSchema = new Schema<ITransaction>(
       type: Schema.Types.ObjectId,
       ref: 'Customer',
       required: true,
-      index: true,
     },
     accountNumber: { type: Number, required: true, index: true },
     destinationAccountNumber: { type: Number },
@@ -39,7 +38,6 @@ const transactionSchema = new Schema<ITransaction>(
       type: String,
       required: true,
       unique: true,
-      index: true,
     },
     status: { type: String, enum: TRANSACTION_STATUSES, default: 'pending' },
     meta: { type: Schema.Types.Mixed },
@@ -47,19 +45,45 @@ const transactionSchema = new Schema<ITransaction>(
   { timestamps: { createdAt: true, updatedAt: false } },
 );
 
-transactionSchema.methods.toPublicJSON = function toPublicJSON() {
+// Serves the per-customer history query (filter by customer, newest first)
+// straight from the index, with no in-memory sort. Its `customer` prefix also
+// covers plain lookups by customer, so that field needs no index of its own.
+transactionSchema.index({ customer: 1, createdAt: -1 });
+
+/** Fields `toPublicTransaction` reads; use as a projection on lean queries. */
+export const PUBLIC_TRANSACTION_FIELDS =
+  'accountNumber destinationAccountNumber operation channel amountKobo status reference createdAt';
+
+type PublicTransactionSource = Pick<
+  ITransaction,
+  | 'accountNumber'
+  | 'destinationAccountNumber'
+  | 'operation'
+  | 'channel'
+  | 'amountKobo'
+  | 'status'
+  | 'reference'
+  | 'createdAt'
+> & { _id: unknown };
+
+/** Shapes a transaction (hydrated document or lean object) for API responses. */
+export function toPublicTransaction(t: PublicTransactionSource): Record<string, unknown> {
   return {
-    id: this._id,
-    accountNumber: this.accountNumber,
-    destinationAccountNumber: this.destinationAccountNumber,
-    operation: this.operation,
-    channel: this.channel,
-    amountKobo: this.amountKobo,
-    amountNaira: this.amountKobo / 100,
-    status: this.status,
-    reference: this.reference,
-    createdAt: this.createdAt,
+    id: t._id,
+    accountNumber: t.accountNumber,
+    destinationAccountNumber: t.destinationAccountNumber,
+    operation: t.operation,
+    channel: t.channel,
+    amountKobo: t.amountKobo,
+    amountNaira: t.amountKobo / 100,
+    status: t.status,
+    reference: t.reference,
+    createdAt: t.createdAt,
   };
+}
+
+transactionSchema.methods.toPublicJSON = function toPublicJSON() {
+  return toPublicTransaction(this as unknown as ITransaction);
 };
 
 export const Transaction = model<ITransaction>('Transaction', transactionSchema);

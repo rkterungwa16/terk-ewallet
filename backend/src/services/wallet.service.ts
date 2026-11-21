@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
 import { Customer, ICustomer } from '../models/customer.model';
-import { Transaction } from '../models/transaction.model';
+import {
+  ITransaction,
+  PUBLIC_TRANSACTION_FIELDS,
+  Transaction,
+  toPublicTransaction,
+} from '../models/transaction.model';
 import { PaystackEvent } from '../models/paystack-event.model';
 import { paystackService, PaystackVerifyData } from './paystack.service';
 import { ApiError } from '../utils/ApiError';
@@ -45,12 +50,15 @@ export const walletService = {
   },
 
   async listTransactions(customerId: string, page = 1, perPage = 30) {
+    // lean(): read-only list, so skip hydrating full Mongoose documents
     const transactions = await Transaction.find({ customer: customerId })
+      .select(PUBLIC_TRANSACTION_FIELDS)
       .sort({ createdAt: -1 })
       .skip(perPage * (page - 1))
       .limit(perPage)
+      .lean<ITransaction[]>()
       .exec();
-    return transactions.map((t) => t.toPublicJSON());
+    return transactions.map(toPublicTransaction);
   },
 
   /**
