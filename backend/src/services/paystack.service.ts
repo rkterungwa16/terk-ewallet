@@ -118,6 +118,25 @@ export interface PaystackTransferData {
   transfer_code: string;
 }
 
+/** Statuses GET /transfer/verify can report for a transfer. */
+export type PaystackTransferStatus =
+  | 'pending'
+  | 'success'
+  | 'failed'
+  | 'reversed'
+  | 'otp'
+  | 'abandoned'
+  | 'blocked'
+  | 'rejected'
+  | 'received';
+
+export interface PaystackTransferVerifyData {
+  reference: string;
+  status: PaystackTransferStatus;
+  transfer_code: string;
+  amount: number; // kobo
+}
+
 // ---- Public API -------------------------------------------------------------
 
 export const paystackService = {
@@ -184,5 +203,11 @@ export const paystackService = {
         reason: params.reason,
       },
     });
+  },
+  /** Asks Paystack what became of a transfer we initiated, by our reference. */
+  verifyTransfer(reference: string) {
+    return paystackRequest<PaystackTransferVerifyData>(
+      `/transfer/verify/${encodeURIComponent(reference)}`,
+    );
   },
 };
