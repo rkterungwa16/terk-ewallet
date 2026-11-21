@@ -47,7 +47,7 @@ export const handlePaystackWebhook = asyncHandler(async (req: Request, res: Resp
       // The signed payload is the charge itself, so no verify round trip:
       // this path only touches the database.
       try {
-        await walletService.confirmFunding(data.reference, data);
+        await walletService.confirmFunding(data.reference, { signedCharge: data });
       } catch (err) {
         if (err instanceof ApiError && SETTLED_STATUSES.includes(err.status)) {
           // Expected outcome, not a delivery failure: ack so Paystack

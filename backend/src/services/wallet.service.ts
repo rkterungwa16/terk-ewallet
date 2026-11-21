@@ -59,6 +59,14 @@ async function publicCustomerById(id: unknown) {
 // Paystack charge statuses after which a charge can never succeed
 const FINAL_FAILURE_STATUSES: readonly string[] = ['failed', 'reversed'];
 
+/**
+ * Who is confirming a deposit. A customer may only confirm their own
+ * deposits. The Paystack webhook may confirm any deposit, and carries the
+ * signed charge data. Each caller must pick one, so a new caller can't
+ * forget the ownership check.
+ */
+export type FundingConfirmer = { customerId: string } | { signedCharge: PaystackVerifyData };
+
 export const walletService = {
   getBalance(customer: AuthCustomer) {
     return toPublicCustomer(customer);
@@ -116,13 +124,23 @@ export const walletService = {
    * reference — called both from the client-side "verify" polling endpoint
    * and from the charge.success webhook, whichever arrives first wins.
    *
+   * A customer (`customerId`) can only confirm their own deposits.
+   *
    * The webhook passes `signedCharge`: the charge data from its payload,
    * already authenticated by Paystack's HMAC signature. That is as
    * trustworthy as a verify call, so it is used directly and the webhook
    * path never waits on Paystack's API. Without it, Paystack is asked.
    */
-  async confirmFunding(reference: string, signedCharge?: PaystackVerifyData) {
-    const transaction = await Transaction.findOne({ reference, operation: 'deposit' }).exec();
+  async confirmFunding(reference: string, confirmer: FundingConfirmer) {
+    const signedCharge = 'signedCharge' in confirmer ? confirmer.signedCharge : undefined;
+    // Someone else's reference gets the same 404 as an unknown one, so this
+    // endpoint can't be used to probe which references exist.
+    const ownerFilter = 'customerId' in confirmer ? { customer: confirmer.customerId } : {};
+    const transaction = await Transaction.findOne({
+      reference,
+      operation: 'deposit',
+      ...ownerFilter,
+    }).exec();
     if (!transaction) {
       throw new ApiError('Unknown transaction reference', httpStatus.NOT_FOUND);
     }
