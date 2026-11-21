@@ -2,12 +2,24 @@ import crypto from 'node:crypto';
 import { Request, Response } from 'express';
 import { env } from '../config/env';
 import { walletService } from '../services/wallet.service';
+import { PaystackVerifyData } from '../services/paystack.service';
 import { asyncHandler } from '../utils/asyncHandler';
+import { ApiError } from '../utils/ApiError';
+import { httpStatus } from '../utils/httpStatus';
 
 interface PaystackWebhookBody {
   event: string;
-  data: { reference: string; status?: string };
+  // for charge.* events this is the same charge object /transaction/verify returns
+  data: PaystackVerifyData;
 }
+
+// Outcomes that retrying the webhook can't change: an unknown reference,
+// a charge that didn't succeed, or a paid amount that doesn't match.
+const SETTLED_STATUSES: readonly number[] = [
+  httpStatus.NOT_FOUND,
+  httpStatus.PAYMENT_REQUIRED,
+  httpStatus.CONFLICT,
+];
 
 function isValidSignature(rawBody: Buffer, signature: string | undefined): boolean {
   if (!signature) return false;
@@ -32,14 +44,22 @@ export const handlePaystackWebhook = asyncHandler(async (req: Request, res: Resp
 
   switch (event) {
     case 'charge.success':
-      // A non-success outcome here (already processed, or Paystack's own
-      // verify call disagreeing with the webhook payload) is an expected
-      // case, not a delivery failure — we still ack with 200 so Paystack
-      // doesn't retry a webhook we've already dealt with.
-      await walletService.confirmFunding(data.reference).catch((err) => {
-        // eslint-disable-next-line no-console
-        console.error(`charge.success webhook: ${(err as Error).message}`);
-      });
+      // The signed payload is the charge itself, so no verify round trip:
+      // this path only touches the database.
+      try {
+        await walletService.confirmFunding(data.reference, data);
+      } catch (err) {
+        if (err instanceof ApiError && SETTLED_STATUSES.includes(err.status)) {
+          // Expected outcome, not a delivery failure: ack so Paystack
+          // doesn't keep retrying it.
+          // eslint-disable-next-line no-console
+          console.error(`charge.success webhook ${data.reference}: ${err.message}`);
+        } else {
+          // Anything else (e.g. the database is down) is rethrown -> 500,
+          // so Paystack retries the webhook later instead of us losing it.
+          throw err;
+        }
+      }
       break;
 
     case 'transfer.success':
