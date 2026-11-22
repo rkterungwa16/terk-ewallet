@@ -59,11 +59,11 @@ function tooMany(res: Response, retryAfterSeconds: number, message: string): Api
   return new ApiError(message, httpStatus.TOO_MANY_REQUESTS);
 }
 
-/** Limits each client IP to `limit` requests per `windowMs`. */
-export function rateLimitByIp(limit: number, windowMs: number) {
+/** Limits each key returned by `keyOf` to `limit` requests per `windowMs`. */
+function rateLimitBy(keyOf: (req: Request) => string, limit: number, windowMs: number) {
   const counter = new FixedWindowCounter(limit, windowMs);
   return (req: Request, res: Response, next: NextFunction): void => {
-    const key = req.ip ?? 'unknown';
+    const key = keyOf(req);
     const wait = counter.retryAfter(key);
     if (wait > 0) {
       next(tooMany(res, wait, 'Too many requests, please try again later'));
@@ -72,6 +72,24 @@ export function rateLimitByIp(limit: number, windowMs: number) {
     counter.hit(key);
     next();
   };
+}
+
+/** Limits each client IP to `limit` requests per `windowMs`. */
+export function rateLimitByIp(limit: number, windowMs: number) {
+  return rateLimitBy((req) => req.ip ?? 'unknown', limit, windowMs);
+}
+
+/**
+ * Limits each authenticated customer to `limit` requests per `windowMs`.
+ * Mount after `authenticate()`. Used on endpoints that write to the ledger
+ * or call Paystack, so one account can't flood either.
+ */
+export function rateLimitByCustomer(limit: number, windowMs: number) {
+  return rateLimitBy(
+    (req) => (req.customer ? `customer:${String(req.customer._id)}` : `ip:${req.ip ?? 'unknown'}`),
+    limit,
+    windowMs,
+  );
 }
 
 /**

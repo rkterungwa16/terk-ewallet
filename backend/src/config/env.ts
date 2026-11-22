@@ -29,13 +29,38 @@ function optional(name: string, fallback: string): string {
   return process.env[name] ?? fallback;
 }
 
+// The JWT secret signs every session token: a short or placeholder value
+// lets anyone who guesses it mint a token for any customer.
+const MIN_JWT_SECRET_LENGTH = 32;
+const PLACEHOLDER_JWT_SECRET = 'replace-this-with-a-long-random-string';
+
+function jwtSecret(isProd: boolean): string {
+  const secret = required('JWT_SECRET');
+  if (secret.length < MIN_JWT_SECRET_LENGTH || secret === PLACEHOLDER_JWT_SECRET) {
+    const message =
+      `JWT_SECRET must be a random string of at least ${MIN_JWT_SECRET_LENGTH} characters ` +
+      "(e.g. `node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\"`)";
+    if (isProd) throw new Error(message);
+    // eslint-disable-next-line no-console
+    console.warn(`WARNING: ${message}`);
+  }
+  return secret;
+}
+
+// Fail safe: anything other than an explicit development/test NODE_ENV runs
+// with production behavior (no stack traces in responses, no query logging,
+// no loopback CORS). Forgetting to set NODE_ENV on a host must not expose
+// debugging aids to the internet.
+const nodeEnv = optional('NODE_ENV', 'production');
+const isProd = nodeEnv !== 'development' && nodeEnv !== 'test';
+
 export const env = {
-  nodeEnv: optional('NODE_ENV', 'development'),
+  nodeEnv,
   port: Number(optional('PORT', '4000')),
 
   mongoUri: required('MONGO_URI'),
 
-  jwtSecret: required('JWT_SECRET'),
+  jwtSecret: jwtSecret(isProd),
   jwtExpiresInMinutes: Number(optional('JWT_EXPIRES_IN_MINUTES', '60')),
 
   paystackSecretKey: required('PAYSTACK_SECRET_KEY'),
@@ -75,4 +100,4 @@ export const env = {
     .filter(Boolean),
 };
 
-export const isProduction = env.nodeEnv === 'production';
+export const isProduction = isProd;

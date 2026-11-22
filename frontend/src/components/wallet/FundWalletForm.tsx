@@ -8,6 +8,15 @@ import { Alert } from '../ui/Alert';
 
 const initialState: FormState<InitializeFundingPayload> = { status: 'idle' };
 
+function isPaystackCheckoutUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === 'checkout.paystack.com';
+  } catch {
+    return false;
+  }
+}
+
 export function FundWalletForm() {
   const [state, formAction, isPending] = useActionState<FormState<InitializeFundingPayload>, FormData>(
     async (_previousState, formData) => {
@@ -15,6 +24,11 @@ export function FundWalletForm() {
 
       try {
         const { authorizationUrl } = await walletApi.initializeFunding({ amount });
+        // Only ever send the customer to Paystack's own checkout over HTTPS,
+        // whatever the API returned.
+        if (!isPaystackCheckoutUrl(authorizationUrl)) {
+          return { status: 'error', message: 'Could not start payment. Please try again.' };
+        }
         // Hand off to Paystack's hosted checkout. The wallet is credited
         // once Paystack confirms the charge — see FundCallbackPage, which
         // handles the redirect back and/or the charge.success webhook on

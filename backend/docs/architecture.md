@@ -191,7 +191,7 @@ flowchart TD
   B -->|OPTIONS| B2[204 preflight]
   B --> W{"/v1/webhooks?"}
   W -->|yes| W1["express.raw → keep rawBody → handlePaystackWebhook"]
-  W -->|no| J[express.json + urlencoded]
+  W -->|no| J[express.json, 10kb limit]
   J --> S["/v1/status → OK"]
   J --> V1["/v1 router"]
   V1 --> AU["/auth: rateLimitByIp → validate → (limitLoginFailures) → controller"]
@@ -692,10 +692,10 @@ Everything comes from environment variables, read and checked once in
 | Variable | Default | Purpose |
 |---|---|---|
 | `MONGO_URI` | **required** | MongoDB connection string |
-| `JWT_SECRET` | **required** | HMAC key for tokens |
+| `JWT_SECRET` | **required** | HMAC key for tokens; at least 32 characters, enforced in production |
 | `PAYSTACK_SECRET_KEY` | **required** | Paystack API key and webhook HMAC key |
 | `PORT` | `4000` | Listen port (must match the Railway domain's target port) |
-| `NODE_ENV` | `development` | `production` hides stacks and disables loopback CORS |
+| `NODE_ENV` | `production` | only `development`/`test` show stacks, log queries and allow loopback CORS; unset means production |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated allowed browser origins |
 | `JWT_EXPIRES_IN_MINUTES` | `60` | Token lifetime |
 | `PAYSTACK_PUBLIC_KEY` | `''` | Read into config; not used by the server |

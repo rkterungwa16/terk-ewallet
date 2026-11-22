@@ -58,6 +58,9 @@ async function publicCustomerById(id: unknown) {
   return customer ? toPublicCustomer(customer) : undefined;
 }
 
+// payout destinations a customer may save
+const MAX_BANK_ACCOUNTS = 10;
+
 // Paystack charge statuses after which a charge can never succeed
 const FINAL_FAILURE_STATUSES: readonly string[] = ['failed', 'reversed'];
 
@@ -134,6 +137,11 @@ export const walletService = {
    * path never waits on Paystack's API. Without it, Paystack is asked.
    */
   async confirmFunding(reference: string, confirmer: FundingConfirmer) {
+    // An undefined reference would be dropped from the query below and
+    // match an arbitrary deposit.
+    if (typeof reference !== 'string' || reference === '') {
+      throw new ApiError('Unknown transaction reference', httpStatus.NOT_FOUND);
+    }
     const signedCharge = 'signedCharge' in confirmer ? confirmer.signedCharge : undefined;
     // Someone else's reference gets the same 404 as an unknown one, so this
     // endpoint can't be used to probe which references exist.
@@ -303,6 +311,19 @@ export const walletService = {
 
   /** Resolves + saves a bank account as a Paystack transfer recipient, for later payouts. */
   async addBankAccount(customer: AuthCustomer, accountNumber: string, bankCode: string) {
+    // Checked before any Paystack call: keeps the customer document bounded
+    // and stops repeat saves being used to look up account names.
+    const existing = customer.bankAccounts ?? [];
+    if (existing.some((b) => b.accountNumber === accountNumber && b.bankCode === bankCode)) {
+      throw new ApiError('This bank account is already saved', httpStatus.CONFLICT);
+    }
+    if (existing.length >= MAX_BANK_ACCOUNTS) {
+      throw new ApiError(
+        `You can save at most ${MAX_BANK_ACCOUNTS} bank accounts`,
+        httpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+
     // The bank name is only a display label, so look it up alongside the
     // Paystack calls and fall back to the code rather than failing the save.
     const bankNamePromise = getBanks()
@@ -318,9 +339,14 @@ export const walletService = {
     const bankName = await bankNamePromise;
 
     // $push writes just the new entry, instead of save() re-sending the
-    // document and racing with concurrent saves of the same customer.
-    const updated = await Customer.findByIdAndUpdate(
-      customer._id,
+    // document and racing with concurrent saves of the same customer. The
+    // filter re-checks the cap and duplicate atomically, for concurrent adds.
+    const updated = await Customer.findOneAndUpdate(
+      {
+        _id: customer._id,
+        [`bankAccounts.${MAX_BANK_ACCOUNTS - 1}`]: { $exists: false },
+        bankAccounts: { $not: { $elemMatch: { accountNumber, bankCode } } },
+      },
       {
         $push: {
           bankAccounts: {
@@ -336,7 +362,10 @@ export const walletService = {
     ).exec();
 
     if (!updated) {
-      throw new ApiError('Customer not found', httpStatus.NOT_FOUND);
+      throw new ApiError(
+        'This bank account is already saved, or the limit was reached',
+        httpStatus.CONFLICT,
+      );
     }
     return updated.toPublicJSON();
   },

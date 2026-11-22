@@ -15,7 +15,14 @@ export function errorConverter(
     return;
   }
 
-  const error = err as { message?: string; status?: number; code?: number };
+  const error = err as {
+    message?: string;
+    status?: number;
+    statusCode?: number;
+    code?: number;
+    name?: string;
+    expose?: boolean;
+  };
 
   // Mongoose duplicate-key error
   if (error.code === 11000) {
@@ -23,12 +30,28 @@ export function errorConverter(
     return;
   }
 
-  next(
-    new ApiError(
-      error.message || 'Internal server error',
-      error.status || httpStatus.INTERNAL_SERVER_ERROR,
-    ),
-  );
+  // A malformed id or a value Mongoose couldn't cast/validate: the client's
+  // fault, but the raw message names internal models and paths.
+  if (error.name === 'CastError' || error.name === 'ValidationError') {
+    next(new ApiError('Invalid request', httpStatus.BAD_REQUEST));
+    return;
+  }
+
+  // body-parser and other http-errors set `expose` on client errors (bad
+  // JSON, payload too large); their messages are safe to show.
+  const status = error.status ?? error.statusCode;
+  if (error.expose && status && status >= 400 && status < 500) {
+    next(new ApiError(error.message || 'Bad request', status));
+    return;
+  }
+
+  // Anything else is unexpected: log it in full, but never send driver,
+  // stack or infrastructure details to the client.
+  // eslint-disable-next-line no-console
+  console.error(err);
+  const wrapped = new ApiError('Internal server error', httpStatus.INTERNAL_SERVER_ERROR);
+  if (!isProduction && err instanceof Error) wrapped.stack = err.stack;
+  next(wrapped);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -38,6 +61,10 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
+  if (err.status >= 500) {
+    // eslint-disable-next-line no-console
+    console.error(`${err.status} ${err.message}`);
+  }
   const body: Record<string, unknown> = {
     code: err.status,
     message: err.message,

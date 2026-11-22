@@ -39,8 +39,22 @@ export const handlePaystackWebhook = asyncHandler(async (req: Request, res: Resp
     return;
   }
 
-  const body = JSON.parse(req.rawBody.toString('utf8')) as PaystackWebhookBody;
+  let body: PaystackWebhookBody;
+  try {
+    body = JSON.parse(req.rawBody.toString('utf8')) as PaystackWebhookBody;
+  } catch {
+    res.status(400).end();
+    return;
+  }
   const { event, data } = body;
+
+  // Every event we act on is keyed by reference. Without one, a lookup by
+  // `{ reference: undefined }` would have Mongoose drop the condition and
+  // match some other customer's transaction.
+  if (typeof data?.reference !== 'string' || data.reference === '') {
+    res.status(200).end();
+    return;
+  }
 
   switch (event) {
     case 'charge.success':
