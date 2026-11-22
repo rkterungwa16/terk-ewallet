@@ -1,0 +1,19 @@
+/* Mermaid diagrams: centered, scroll sideways on narrow screens instead of shrinking */
+.vp-doc pre.mermaid {
+  background: transparent;
+  text-align: center;
+  overflow-x: auto;
+  margin: 24px 0;
+  padding: 0;
+}
+
+.vp-doc pre.mermaid svg {
+  max-width: none;
+  height: auto;
+}
+
+/* wide decision tables scroll rather than squeeze */
+.vp-doc table {
+  display: block;
+  overflow-x: auto;
+}

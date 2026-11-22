@@ -1,0 +1,20 @@
+{
+  "name": "terk-ewallet-docs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Documentation site for the wallet backend and frontend, built from the markdown in backend/ and frontend/.",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs",
+    "dev": "npm run sync && vitepress dev",
+    "build": "npm run sync && vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "mermaid": "12.3.0",
+    "vitepress": "1.6.4"
+  }
+}

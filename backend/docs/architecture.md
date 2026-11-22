@@ -187,7 +187,8 @@ request is stuck waiting on Paystack. A second signal exits at once.
 
 ```mermaid
 flowchart TD
-  A[requestLog] --> B[cors]
+  A[requestLog] --> SH[securityHeaders]
+  SH --> B[cors]
   B -->|OPTIONS| B2[204 preflight]
   B --> W{"/v1/webhooks?"}
   W -->|yes| W1["express.raw → keep rawBody → handlePaystackWebhook"]
@@ -196,26 +197,31 @@ flowchart TD
   J --> V1["/v1 router"]
   V1 --> AU["/auth: rateLimitByIp → validate → (limitLoginFailures) → controller"]
   V1 --> CU["/customers: authenticate → controller"]
-  V1 --> WA["/wallet: authenticate → validate → controller"]
+  V1 --> WA["/wallet: authenticate → (rateLimitByCustomer) → validate → controller"]
   V1 --> NF[notFound]
   NF --> EC[errorConverter] --> EH[errorHandler]
 ```
 
 1. **`requestLog`** is first so every request is timed, preflights and
    webhooks included.
-2. **`cors`** answers preflights with 204 and sets CORS headers for allowed
+2. **`securityHeaders`** sets `nosniff`, `no-store`, a deny-all CSP, frame
+   denial and (in production) HSTS on every response. See
+   [security record 10](security/10-security-headers.md).
+3. **`cors`** answers preflights with 204 and sets CORS headers for allowed
    origins: those in `CORS_ORIGINS` (normalized, so a trailing slash or
    capital letters don't matter), plus any `localhost` / `127.0.0.1` /
    `[::1]` port outside production. It always sends `Vary: Origin`.
-3. **The webhook router is mounted before `express.json()`.** Paystack signs
+4. **The webhook router is mounted before `express.json()`.** Paystack signs
    the exact bytes it sends, so that route reads the body with
    `express.raw()` and keeps the untouched `Buffer` on `req.rawBody` for the
    HMAC check. If JSON parsing ran first, the signature could not be checked.
-4. **Body parsers** run for everything else.
-5. **`/v1/status`** is an unauthenticated health check.
-6. **`/v1` routers.** Every `/wallet` route requires authentication (it is
-   applied at router level). `/auth` routes are rate-limited per IP.
-7. **`notFound`**, then **`errorConverter`** and **`errorHandler`**
+5. **The JSON body parser** runs for everything else.
+6. **`/v1/status`** is an unauthenticated health check.
+7. **`/v1` routers.** Every `/wallet` route requires authentication (it is
+   applied at router level). `/auth` routes are rate-limited per IP, and
+   `/wallet` routes that move money or call Paystack per customer
+   ([security record 08](security/08-wallet-rate-limits-and-bank-account-cap.md)).
+8. **`notFound`**, then **`errorConverter`** and **`errorHandler`**
    (section 14).
 
 `trust proxy` is set to `TRUST_PROXY` hops so `req.ip` is the real client
@@ -230,7 +236,7 @@ Responses carry both `…Kobo` and `…Naira` fields.
 | Method | Path | Auth | Body / query | Purpose |
 |---|---|---|---|---|
 | GET | `/v1/status` | – | – | Health check, returns `OK` |
-| POST | `/v1/auth/register` | – | `email`, `password` (6–128), `name?` | Create customer and wallet, return JWT |
+| POST | `/v1/auth/register` | – | `email`, `password` (8–128), `name?` | Create customer and wallet, return JWT |
 | POST | `/v1/auth/login` | – | `email`, `password` | Return JWT |
 | GET | `/v1/customers/me` | JWT | – | Profile, balance and saved bank accounts |
 | GET | `/v1/wallet/balance` | JWT | – | Same shape as `/customers/me` |
