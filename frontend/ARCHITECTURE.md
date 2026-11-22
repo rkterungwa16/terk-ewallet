@@ -192,8 +192,8 @@ runtime bug.
 
 Three independent state machines: `AsyncState<TData, TError>`
 (idle/loading/success/error, for any single request), `AuthState`
-(anonymous/hydrating/authenticated/error, for the session), `FormState
-<TValues>` (idle/error/success, for a form submission). Each variant only
+(anonymous/hydrating/authenticated/error, for the session),
+`FormState<TValues>` (idle/error/success, for a form submission). Each variant only
 carries the fields valid for it, which is what makes illegal combinations
 unrepresentable rather than merely "not supposed to happen." The `status`
 field is the tag TypeScript narrows on.
