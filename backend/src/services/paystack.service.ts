@@ -69,9 +69,18 @@ async function paystackRequest<T>(
   }
 
   if (!res.ok || json.status === false) {
+    // 401/403 here mean *our* Paystack key was refused (a server
+    // misconfiguration), not that the customer's session is bad, and
+    // Paystack's 5xx are upstream failures: report both as a bad gateway,
+    // without Paystack's wording about our credentials.
+    if (res.status === 401 || res.status === 403 || res.status >= 500) {
+      // eslint-disable-next-line no-console
+      console.error(`Paystack ${path.split('?')[0]} -> ${res.status}: ${json.message}`);
+      throw new ApiError('Payment provider request failed', httpStatus.BAD_GATEWAY);
+    }
     throw new ApiError(
       json.message || 'Paystack request failed',
-      res.status || httpStatus.BAD_GATEWAY,
+      res.ok ? httpStatus.BAD_GATEWAY : res.status,
     );
   }
 

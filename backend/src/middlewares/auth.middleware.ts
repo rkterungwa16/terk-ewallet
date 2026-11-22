@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { AuthCustomer, Customer, CustomerRole } from '../models/customer.model';
 import { jwt } from '../utils/jwt';
 import { env } from '../config/env';
@@ -24,7 +25,15 @@ export function authenticate(...allowedRoles: CustomerRole[]) {
     try {
       payload = jwt.verify(token, env.jwtSecret);
     } catch (err) {
-      throw new ApiError((err as Error).message || 'Unauthorized', httpStatus.UNAUTHORIZED);
+      const message =
+        (err as Error).message === 'Token expired' ? 'Session expired' : 'Unauthorized';
+      throw new ApiError(message, httpStatus.UNAUTHORIZED);
+    }
+
+    // A well-signed token whose subject isn't an ObjectId would make
+    // findById throw a CastError (a 500); treat it as unauthenticated.
+    if (!Types.ObjectId.isValid(payload.sub)) {
+      throw new ApiError('Unauthorized', httpStatus.UNAUTHORIZED);
     }
 
     // Runs on every authenticated request: return a plain object and leave

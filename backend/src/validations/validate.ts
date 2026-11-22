@@ -69,7 +69,11 @@ export const isEmail =
   (label = 'Email'): FieldCheck =>
   (value) => {
     if (value === undefined) return undefined;
-    const ok = typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    // Length is checked before the regex, which backtracks quadratically:
+    // a 100 KB "email" would otherwise block the event loop for seconds.
+    // 254 is the longest address SMTP allows.
+    const ok =
+      typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
     return ok ? undefined : `${label} must be a valid email address`;
   };
 

@@ -53,11 +53,25 @@ function verify<T extends JwtPayload = JwtPayload>(token: string, secret: string
     throw new Error('Invalid token signature');
   }
 
-  const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as T & {
-    exp?: number;
-  };
+  let header: { alg?: unknown };
+  let payload: T & { exp?: unknown };
+  try {
+    header = JSON.parse(Buffer.from(encodedHeader, 'base64url').toString('utf8'));
+    payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
+  } catch {
+    throw new Error('Malformed token');
+  }
 
-  if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) {
+  // Only HS256 is ever issued; anything else is not one of ours.
+  if (header?.alg !== 'HS256') {
+    throw new Error('Malformed token');
+  }
+  if (typeof payload?.sub !== 'string') {
+    throw new Error('Malformed token');
+  }
+  // Every token we sign expires; one without a numeric exp would never
+  // expire, so it is refused rather than trusted forever.
+  if (typeof payload.exp !== 'number' || Math.floor(Date.now() / 1000) >= payload.exp) {
     throw new Error('Token expired');
   }
 

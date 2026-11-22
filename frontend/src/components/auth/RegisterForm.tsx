@@ -46,6 +46,8 @@ export function RegisterForm() {
         label="Password"
         type="password"
         required
+        minLength={8}
+        maxLength={128}
         autoComplete="new-password"
       />
       <Button type="submit" pending={isPending}>

@@ -28,6 +28,8 @@ interface FieldProps<TValues> {
   required?: boolean;
   min?: number;
   step?: number;
+  minLength?: number;
+  maxLength?: number;
   autoComplete?: string;
   errors?: FormErrors<TValues>;
 }
@@ -41,6 +43,8 @@ export function Field<TValues>({
   required,
   min,
   step,
+  minLength,
+  maxLength,
   autoComplete,
   errors,
 }: FieldProps<TValues>) {
@@ -66,6 +70,8 @@ export function Field<TValues>({
         required={required}
         min={min}
         step={step}
+        minLength={minLength}
+        maxLength={maxLength}
         autoComplete={autoComplete}
         aria-invalid={errorMessage ? true : undefined}
         aria-describedby={errorMessage ? `${id}-error` : undefined}
